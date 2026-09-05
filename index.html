@@ -2,6 +2,8 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <title>Saisie Chantier</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0f3460">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -12,7 +14,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    html{height:100%;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+    html,body{height:100%;width:100%;max-width:100%;overflow-x:hidden;-webkit-tap-highlight-color:transparent;touch-action:manipulation;-ms-touch-action:manipulation}
+    html{touch-action:pan-x pan-y;-ms-content-zooming:none;}
+    /* Plein écran total - bloquer zoom */
+    body{-webkit-user-select:none;-moz-user-select:none;user-select:none;}
+    input,textarea,select{-webkit-user-select:auto;-moz-user-select:auto;user-select:auto;}
     body{
       font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
       background:#0d0d1a;color:#e0e0e0;min-height:100%;
@@ -550,6 +556,42 @@ function setupPWA(){
       });
     });
   }
+
+  /* ═══ BLOQUER ZOOM (pinch, double-tap, keyboard shortcuts) ═══ */
+  // Bloquer pinch-to-zoom (iOS Safari)
+  document.addEventListener('gesturestart', function(e){ e.preventDefault(); }, {passive:false});
+  document.addEventListener('gesturechange', function(e){ e.preventDefault(); }, {passive:false});
+  document.addEventListener('gestureend', function(e){ e.preventDefault(); }, {passive:false});
+
+  // Bloquer double-tap zoom (iOS)
+  var lastTap=0;
+  document.addEventListener('touchend', function(e){
+    var now=Date.now();
+    if(now-lastTap<300 && e.touches.length===0){ e.preventDefault(); }
+    lastTap=now;
+  }, {passive:false});
+
+  // Bloquer Ctrl+wheel zoom (desktop)
+  document.addEventListener('wheel', function(e){
+    if(e.ctrlKey){ e.preventDefault(); }
+  }, {passive:false});
+
+  // Bloquer Ctrl+/- zoom keyboard (desktop)
+  document.addEventListener('keydown', function(e){
+    if(e.ctrlKey && (e.key==='+' || e.key==='-' || e.key==='=' || e.key==='0')){
+      e.preventDefault();
+    }
+  });
+
+  /* ═══ FORCER PLEIN ÉCRAN SUR MOBILE ═══ */
+  // Fix iOS Safari height (100vh bug)
+  function fixHeight(){
+    var vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', vh + 'px');
+  }
+  fixHeight();
+  window.addEventListener('resize', fixHeight);
+  window.addEventListener('orientationchange', function(){ setTimeout(fixHeight, 200); });
 
   // Handle install prompt
   window.addEventListener('beforeinstallprompt',function(e){
