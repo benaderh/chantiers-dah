@@ -71,6 +71,48 @@ function configurerTout() {
   );
 }
 
+/**
+ * VERSION RAPIDE — uniquement pour mettre à jour le module Versements.
+ * ✅ Exécuter CETTE fonction si "configurerTout" dépasse le délai.
+ * Elle ajoute/crée uniquement :
+ *   • La feuille "Versements"
+ *   • La colonne G (Réf_Vers, cachée) dans chaque feuille chantier
+ * Elle NE refait PAS le thème ni les validations (plus rapide).
+ */
+function ajouterModuleVersements() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 1. Créer la feuille Versements
+  creerFeuilleVersements_(ss);
+
+  // 2. Pour chaque feuille chantier, ajouter col G si absente
+  const modifiees = [];
+  ss.getSheets().forEach(sh => {
+    const nom = sh.getName();
+    if (nom === FEUILLE_LISTES || nom === FEUILLE_VERSEMENTS) return;
+
+    // Ajouter col G si besoin
+    while (sh.getMaxColumns() < COL_REF_VERS) {
+      sh.insertColumnAfter(sh.getMaxColumns());
+    }
+    // Masquer col G
+    try { sh.showColumns(COL_REF_VERS); sh.hideColumns(COL_REF_VERS); } catch(e) {}
+    // Écrire l'en-tête en G1 si vide
+    const hdrCell = sh.getRange(1, COL_REF_VERS);
+    if (!hdrCell.getValue()) hdrCell.setValue('Réf_Vers');
+
+    modifiees.push(nom);
+  });
+
+  // 3. Résultat
+  SpreadsheetApp.getUi().alert(
+    '✅ Module Versements ajouté !\n\n' +
+    '• Feuille "Versements" : prête\n' +
+    '• Col G (Réf_Vers) ajoutée dans :\n  - ' + modifiees.join('\n  - ') + '\n\n' +
+    'Maintenant : Déployer > Gérer les déploiements > Nouvelle version.'
+  );
+}
+
 // ═══════════════════════════════════════════════
 //  FEUILLE LISTES
 // ═══════════════════════════════════════════════
@@ -227,10 +269,13 @@ function afficherFeuilleListes() {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🏗 Chantiers')
-    .addItem('⚙️ Configurer', 'configurerTout')
+    .addItem('⚡ Ajouter module Versements (RAPIDE)', 'ajouterModuleVersements')
+    .addSeparator()
+    .addItem('⚙️ Configurer tout (lent, 1ère fois)', 'configurerTout')
     .addItem('📝 Modifier libellés', 'afficherFeuilleListes')
     .addToUi();
 }
+
 
 function onEdit(e) {
   if (!e || !e.range) return;
