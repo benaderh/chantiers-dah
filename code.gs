@@ -113,6 +113,45 @@ function ajouterModuleVersements() {
   );
 }
 
+/**
+ * TEST RAPIDE — exécuter depuis Apps Script pour vérifier que tout fonctionne.
+ * Affiche un résumé de l'état de la configuration.
+ */
+function testerAPI() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Vérifier feuille Versements
+  const shV = ss.getSheetByName(FEUILLE_VERSEMENTS);
+  const versementsOk = !!shV;
+
+  // Vérifier col G dans chaque feuille chantier
+  const colGStatus = [];
+  ss.getSheets().forEach(sh => {
+    const nom = sh.getName();
+    if (nom === FEUILLE_LISTES || nom === FEUILLE_VERSEMENTS) return;
+    const hasColG = sh.getMaxColumns() >= COL_REF_VERS;
+    const isHidden = hasColG ? sh.isColumnHiddenByUser(COL_REF_VERS) : false;
+    colGStatus.push(nom + ': Col G ' + (hasColG ? (isHidden ? '✅ cachée' : '⚠️ visible') : '❌ absente'));
+  });
+
+  // Test écriture versement
+  let writeTest = '❌';
+  try {
+    const testResult = getChantiers();
+    writeTest = '✅ ' + testResult.length + ' chantier(s) trouvé(s): ' + testResult.join(', ');
+  } catch(e) { writeTest = '❌ ' + e.message; }
+
+  SpreadsheetApp.getUi().alert(
+    '🔍 DIAGNOSTIC API\n\n' +
+    '1. Feuille Versements : ' + (versementsOk ? '✅ OK' : '❌ ABSENTE → exécuter ajouterModuleVersements') + '\n\n' +
+    '2. Chantiers :\n   ' + (colGStatus.join('\n   ') || 'Aucun chantier') + '\n\n' +
+    '3. API getChantiers : ' + writeTest + '\n\n' +
+    '─────────────────────\n' +
+    'Si tout est ✅ ici mais le bouton ne fonctionne pas dans l\'app :\n' +
+    '→ Déployer > Gérer les déploiements > ✏️ Modifier > Nouvelle version > Déployer'
+  );
+}
+
 // ═══════════════════════════════════════════════
 //  FEUILLE LISTES
 // ═══════════════════════════════════════════════
