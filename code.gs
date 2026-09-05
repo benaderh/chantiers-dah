@@ -1,26 +1,23 @@
 /**
  * SAISIE CHANTIER MOBILE — Google Sheets
- * Application de saisie mobile avec thème sombre et menus déroulants filtrés.
+ * v3 — Module Versements chef de chantier
  *
  * FONCTIONNEMENT :
- * - Chaque feuille = un chantier (sauf la feuille cachée "Listes")
- * - La feuille "Listes" (cachée) contient les libellés et leur chantier_id
- * - Le menu déroulant "libellé" est filtré par chantier
- * - Libellés sans chantier_id = communs à tous les chantiers
- * - Thème sombre optimisé pour mobile
- * - Seules les colonnes A-F sont visibles
- * - 10 lignes vides après la dernière saisie
+ * - Chaque feuille = un chantier (sauf "Listes" et "Versements")
+ * - Feuille "Listes" : libellés + chantier_id + CP
+ * - Feuille "Versements" : suivi des sommes versées au chef
+ * - Col G (cachée) dans feuilles chantier = Réf versement (V-001...)
  *
  * INSTALLATION :
  * 1. Extensions > Apps Script > coller ce code > Exécuter "configurerTout"
- * 2. Menu Chantiers > "Modifier les libellés" pour accéder à la feuille Listes
- *
- * AJOUT CHANTIER : créer la feuille + relancer "configurerTout"
+ * 2. Menu Chantiers > "Modifier les libellés"
  */
 
-const HEADERS = ['date', 'libelle', 'charges', 'produits', 'reglement', 'obs'];
-const FEUILLE_LISTES = 'Listes';
-const NB_COLS = 6;
+const HEADERS           = ['date', 'libelle', 'charges', 'produits', 'reglement', 'obs'];
+const FEUILLE_LISTES    = 'Listes';
+const FEUILLE_VERSEMENTS = 'Versements';
+const NB_COLS           = 6;
+const COL_REF_VERS      = 7; // Col G dans les feuilles chantier = référence versement
 
 // ─── Thème sombre ───
 const THEME = {
@@ -34,7 +31,6 @@ const THEME = {
   border:     '#2a2a4a'
 };
 
-// Libellés de départ (chantier_id vide = communs à tous)
 const LIBELLES_DEFAUT = [
   'Achat matériaux', 'Location engin', 'Carburant', 'Main d\'œuvre',
   'Transport', 'Paiement client', 'Avance client', 'Facture fournisseur',
@@ -48,16 +44,17 @@ const LIBELLES_DEFAUT = [
 function configurerTout() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   creerFeuilleListes_(ss);
+  creerFeuilleVersements_(ss);
   const listeData = lireListesData_(ss);
 
   const chantierSheets = [];
   ss.getSheets().forEach(sh => {
-    if (sh.getName() === FEUILLE_LISTES) return;
+    if (sh.getName() === FEUILLE_LISTES)     return;
+    if (sh.getName() === FEUILLE_VERSEMENTS) return;
     configurerFeuilleChantier_(sh, ss, listeData);
     chantierSheets.push(sh);
   });
 
-  // Masquer la feuille Listes (accessible via menu Chantiers)
   if (chantierSheets.length > 0) {
     ss.setActiveSheet(chantierSheets[0]);
     const listeSh = ss.getSheetByName(FEUILLE_LISTES);
@@ -69,7 +66,7 @@ function configurerTout() {
     '• Thème sombre activé\n' +
     '• Menus déroulants filtrés par chantier\n' +
     '• Feuille Listes masquée\n' +
-    '  → Menu Chantiers > Modifier les libellés\n\n' +
+    '• Feuille Versements créée/mise à jour\n\n' +
     'Pense à remplir la colonne chantier_id dans Listes.'
   );
 }
@@ -78,9 +75,6 @@ function configurerTout() {
 //  LECTURE / FILTRAGE DES LIBELLÉS
 // ═══════════════════════════════════════════════
 
-/**
- * Lit les données de la feuille Listes (libellé + chantier_id + CP)
- */
 function lireListesData_(ss) {
   const sh = ss.getSheetByName(FEUILLE_LISTES);
   const lastRow = sh.getLastRow();
@@ -90,21 +84,17 @@ function lireListesData_(ss) {
   return data
     .filter(row => row[0] !== '')
     .map(row => ({
-      libelle: String(row[0]).trim(),
+      libelle:    String(row[0]).trim(),
       chantierId: String(row[1] || '').trim(),
-      cp: String(row[2] || '').trim().toUpperCase()
+      cp:         String(row[2] || '').trim().toUpperCase()
     }));
 }
 
-/**
- * Retourne les libellés pour un chantier, filtré par type CP optionnel.
- * cpType = 'C' (charges), 'P' (produits), ou vide (tous)
- */
 function filtrerLibellesPourChantier_(listeData, nomChantier, cpType) {
   return listeData
     .filter(item => {
       const okChantier = item.chantierId === '' || item.chantierId === nomChantier;
-      const okType = !cpType || item.cp === '' || item.cp === cpType;
+      const okType     = !cpType || item.cp === '' || item.cp === cpType;
       return okChantier && okType;
     })
     .map(item => item.libelle);
@@ -117,7 +107,6 @@ function filtrerLibellesPourChantier_(listeData, nomChantier, cpType) {
 function creerFeuilleListes_(ss) {
   let sh = ss.getSheetByName(FEUILLE_LISTES);
   if (!sh) {
-    // Création initiale
     sh = ss.insertSheet(FEUILLE_LISTES);
     sh.getRange('A1').setValue('Libellé');
     sh.getRange('B1').setValue('chantier_id');
@@ -129,7 +118,6 @@ function creerFeuilleListes_(ss) {
     sh.setColumnWidth(3, 60);
     sh.getRange('A1:C1').setFontWeight('bold');
   } else {
-    // Migration : ajouter colonnes manquantes
     if (sh.getRange('B1').getValue() !== 'chantier_id') {
       sh.getRange('B1').setValue('chantier_id');
       sh.setColumnWidth(2, 160);
@@ -140,9 +128,36 @@ function creerFeuilleListes_(ss) {
     }
     sh.getRange('A1:C1').setFontWeight('bold');
   }
-  // Placer en dernier
   ss.setActiveSheet(sh);
   ss.moveActiveSheet(ss.getNumSheets());
+  return sh;
+}
+
+// ═══════════════════════════════════════════════
+//  FEUILLE VERSEMENTS
+// ═══════════════════════════════════════════════
+
+function creerFeuilleVersements_(ss) {
+  let sh = ss.getSheetByName(FEUILLE_VERSEMENTS);
+  if (!sh) {
+    sh = ss.insertSheet(FEUILLE_VERSEMENTS);
+    const hdrs = [['ID', 'Date', 'Chantier', 'Montant', 'Obs']];
+    sh.getRange(1, 1, 1, 5)
+      .setValues(hdrs)
+      .setBackground(THEME.headerBg)
+      .setFontColor(THEME.headerText)
+      .setFontWeight('bold')
+      .setHorizontalAlignment('center');
+    sh.setColumnWidth(1, 80);
+    sh.setColumnWidth(2, 120);
+    sh.setColumnWidth(3, 180);
+    sh.setColumnWidth(4, 110);
+    sh.setColumnWidth(5, 240);
+    sh.getRange(2, 2, 200, 1).setNumberFormat('dd/MM/yyyy');
+    sh.getRange(2, 4, 200, 1).setNumberFormat('# ##0');
+    sh.setTabColor('#f39c12');
+    sh.setFrozenRows(1);
+  }
   return sh;
 }
 
@@ -153,91 +168,74 @@ function creerFeuilleListes_(ss) {
 function configurerFeuilleChantier_(sh, ss, listeData) {
   const nomChantier = sh.getName();
 
-  // En-têtes si feuille vide
-  if (sh.getLastRow() === 0) {
-    sh.appendRow(HEADERS);
-  }
+  if (sh.getLastRow() === 0) sh.appendRow(HEADERS);
 
-  // ── Limiter les lignes : dernière donnée + 10 ──
   const lastDataRow = Math.max(sh.getLastRow(), 1);
-  const targetRows = lastDataRow + 10;
-  const maxRows = sh.getMaxRows();
-  if (maxRows > targetRows) {
-    sh.deleteRows(targetRows + 1, maxRows - targetRows);
-  } else if (maxRows < targetRows) {
-    sh.insertRowsAfter(maxRows, targetRows - maxRows);
-  }
+  const targetRows  = lastDataRow + 10;
+  const maxRows     = sh.getMaxRows();
+  if (maxRows > targetRows)      sh.deleteRows(targetRows + 1, maxRows - targetRows);
+  else if (maxRows < targetRows) sh.insertRowsAfter(maxRows, targetRows - maxRows);
   const nbLignes = targetRows - 1;
 
   sh.setFrozenRows(1);
 
-  // ── Nettoyer l'ancienne colonne H helper si elle existe ──
+  // Nettoyer ancienne col H helper
   if (sh.getMaxColumns() >= 8) {
     try {
       sh.showColumns(8);
-      if (sh.getRange('H1').getValue() === '_libelles') {
-        sh.getRange('H1:H200').clear();
-      }
-    } catch (e) { /* ignore */ }
+      if (sh.getRange('H1').getValue() === '_libelles') sh.getRange('H1:H200').clear();
+    } catch (e) {}
   }
 
-  // ── Masquer colonnes au-delà de F ──
+  // S'assurer que la col G existe (Réf_Vers), puis masquer tout au-delà
   const maxCols = sh.getMaxColumns();
-  if (maxCols > NB_COLS) {
-    sh.hideColumns(NB_COLS + 1, maxCols - NB_COLS);
+  if (maxCols < COL_REF_VERS) {
+    sh.insertColumnsAfter(maxCols, COL_REF_VERS - maxCols);
   }
+  // Masquer col G et au-delà de G
+  const totalCols = sh.getMaxColumns();
+  if (totalCols > COL_REF_VERS) sh.hideColumns(COL_REF_VERS + 1, totalCols - COL_REF_VERS);
+  // Masquer col G (Réf_Vers — usage interne)
+  try { sh.showColumns(COL_REF_VERS); sh.hideColumns(COL_REF_VERS); } catch(e) {}
 
-  // ── Largeurs adaptées mobile ──
-  sh.setColumnWidth(1, 130);  // date (jjj dd/mm/aaaa)
-  sh.setColumnWidth(2, 180);  // libelle
-  sh.setColumnWidth(3, 90);   // charges
-  sh.setColumnWidth(4, 90);   // produits
-  sh.setColumnWidth(5, 90);   // reglement
-  sh.setColumnWidth(6, 180);  // obs
+  // Largeurs
+  sh.setColumnWidth(1, 130);
+  sh.setColumnWidth(2, 180);
+  sh.setColumnWidth(3, 90);
+  sh.setColumnWidth(4, 90);
+  sh.setColumnWidth(5, 90);
+  sh.setColumnWidth(6, 180);
 
-  // ── THÈME SOMBRE ──
   appliquerThemeSombre_(sh, nbLignes);
-
-  // Tab color
   sh.setTabColor(THEME.accent);
 
-  // ── VALIDATIONS ──
-  // Date (colonne A)
+  // ── Validations ──
   const rangeDate = sh.getRange(2, 1, nbLignes, 1);
   rangeDate.setNumberFormat('ddd dd/MM/yyyy');
   rangeDate.setDataValidation(
     SpreadsheetApp.newDataValidation()
-      .requireDate()
-      .setAllowInvalid(true)
-      .setHelpText('Date')
-      .build()
+      .requireDate().setAllowInvalid(true).setHelpText('Date').build()
   );
 
-  // Libellés filtrés (colonne B)
   const libellesFiltres = filtrerLibellesPourChantier_(listeData, nomChantier);
-  const rangeLibelle = sh.getRange(2, 2, nbLignes, 1);
+  const rangeLibelle    = sh.getRange(2, 2, nbLignes, 1);
   if (libellesFiltres.length > 0) {
     rangeLibelle.setDataValidation(
       SpreadsheetApp.newDataValidation()
         .requireValueInList(libellesFiltres, true)
-        .setAllowInvalid(true)
-        .setHelpText('Choisis ou tape un libellé')
-        .build()
+        .setAllowInvalid(true).setHelpText('Choisis ou tape un libellé').build()
     );
   } else {
     rangeLibelle.clearDataValidations();
   }
 
-  // Nombres (colonnes C, D, E) — entiers, espace milliers
   [3, 4, 5].forEach(col => {
     const r = sh.getRange(2, col, nbLignes, 1);
     r.setNumberFormat('# ##0');
     r.setDataValidation(
       SpreadsheetApp.newDataValidation()
         .requireNumberGreaterThanOrEqualTo(0)
-        .setAllowInvalid(true)
-        .setHelpText('Montant (entier)')
-        .build()
+        .setAllowInvalid(true).setHelpText('Montant (entier)').build()
     );
   });
 }
@@ -247,7 +245,6 @@ function configurerFeuilleChantier_(sh, ss, listeData) {
 // ═══════════════════════════════════════════════
 
 function appliquerThemeSombre_(sh, nbLignes) {
-  // ── Header ──
   const headerRange = sh.getRange(1, 1, 1, NB_COLS);
   headerRange
     .setBackground(THEME.headerBg)
@@ -257,10 +254,8 @@ function appliquerThemeSombre_(sh, nbLignes) {
     .setHorizontalAlignment('center')
     .setBorder(true, true, true, true, false, false, THEME.border, SpreadsheetApp.BorderStyle.SOLID);
 
-  // ── Data rows : alternance de 2 teintes sombres ──
   if (nbLignes > 0) {
-    const bgs = [];
-    const fontColors = [];
+    const bgs = [], fontColors = [];
     for (let i = 0; i < nbLignes; i++) {
       const bg = (i % 2 === 0) ? THEME.rowDark : THEME.rowDarkAlt;
       bgs.push(Array(NB_COLS).fill(bg));
@@ -272,8 +267,6 @@ function appliquerThemeSombre_(sh, nbLignes) {
       .setFontColors(fontColors)
       .setFontSize(11)
       .setBorder(false, false, false, false, true, true, THEME.border, SpreadsheetApp.BorderStyle.SOLID);
-
-    // Colonne "obs" en texte atténué
     sh.getRange(2, 6, nbLignes, 1).setFontColor(THEME.textMuted);
   }
 }
@@ -282,7 +275,6 @@ function appliquerThemeSombre_(sh, nbLignes) {
 //  MENU & UTILITAIRES
 // ═══════════════════════════════════════════════
 
-/** Affiche la feuille Listes (cachée) pour modification */
 function afficherFeuilleListes() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = ss.getSheetByName(FEUILLE_LISTES);
@@ -297,110 +289,95 @@ function afficherFeuilleListes() {
   }
 }
 
-/** Menu PC (les menus ne fonctionnent pas sur mobile) */
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🏗 Chantiers')
     .addItem('⚙️ Configurer / mettre à jour', 'configurerTout')
-    .addItem('📝 Modifier les libellés', 'afficherFeuilleListes')
+    .addItem('📝 Modifier les libellés',       'afficherFeuilleListes')
     .addToUi();
 }
 
 // ═══════════════════════════════════════════════
-//  AUTO-DATE : remplit la date du jour si vide
+//  AUTO-DATE
 // ═══════════════════════════════════════════════
 
-/**
- * Trigger onEdit : quand on saisit dans une ligne vide,
- * la colonne A est remplie automatiquement avec la date du jour.
- */
 function onEdit(e) {
   if (!e || !e.range) return;
   const sh = e.range.getSheet();
-
-  // Ignorer la feuille Listes et la ligne d'en-tête
-  if (sh.getName() === FEUILLE_LISTES) return;
+  if (sh.getName() === FEUILLE_LISTES)     return;
+  if (sh.getName() === FEUILLE_VERSEMENTS) return;
   const row = e.range.getRow();
   if (row < 2) return;
-
-  // Si la cellule date (colonne A) de cette ligne est vide, y mettre aujourd'hui
   const cellDate = sh.getRange(row, 1);
-  if (cellDate.getValue() === '') {
-    cellDate.setValue(new Date());
-  }
+  if (cellDate.getValue() === '') cellDate.setValue(new Date());
 }
 
 // ═══════════════════════════════════════════════
 //  WEB APP PWA — API
 // ═══════════════════════════════════════════════
 
-/** Point d'entrée Web App — sert la page HTML ou répond aux appels API */
 function doGet(e) {
-  // Si un paramètre "action" est présent → c'est un appel API depuis Netlify
   if (e && e.parameter && e.parameter.action) {
     return handleAPI_(e.parameter.action, e.parameter.params);
   }
-  // Sinon → servir la page HTML (comportement original)
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Saisie Chantier')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-/** Retourne la liste des noms de chantiers (feuilles visibles) */
+/** Liste des chantiers (feuilles visibles, hors Listes et Versements) */
 function getChantiers() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return ss.getSheets()
-    .filter(sh => sh.getName() !== FEUILLE_LISTES)
+    .filter(sh => sh.getName() !== FEUILLE_LISTES && sh.getName() !== FEUILLE_VERSEMENTS)
     .map(sh => sh.getName());
 }
 
-/**
- * Retourne les libellés filtrés pour un chantier et un type CP.
- * cpType = 'C' (charges), 'P' (produits), ou '' (tous)
- */
 function getLibellesForChantier(nomChantier, cpType) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const listeData = lireListesData_(ss);
   return filtrerLibellesPourChantier_(listeData, nomChantier, cpType || '');
 }
 
-/** Retourne les saisies d'un chantier avec numéro de ligne */
+/** Retourne les saisies d'un chantier avec numéro de ligne et refVers */
 function getSaisies(nomChantier) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = ss.getSheetByName(nomChantier);
   if (!sh) return [];
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return [];
-  const data = sh.getRange(2, 1, lastRow - 1, 6).getValues();
-  const tz = Session.getScriptTimeZone();
+  // Lire jusqu'à la col G (Réf_Vers) si elle existe
+  const nCols = Math.min(Math.max(sh.getLastColumn(), 6), COL_REF_VERS);
+  const data = sh.getRange(2, 1, lastRow - 1, nCols).getValues();
+  const tz   = Session.getScriptTimeZone();
   return data
     .map((row, idx) => ({
-      rowNum: idx + 2,
-      date: (row[0] instanceof Date)
-        ? Utilities.formatDate(row[0], tz, 'yyyy-MM-dd')
-        : String(row[0] || ''),
-      libelle: String(row[1] || ''),
-      charges: Number(row[2]) || 0,
+      rowNum:   idx + 2,
+      date:     (row[0] instanceof Date)
+                  ? Utilities.formatDate(row[0], tz, 'yyyy-MM-dd')
+                  : String(row[0] || ''),
+      libelle:  String(row[1] || ''),
+      charges:  Number(row[2]) || 0,
       produits: Number(row[3]) || 0,
-      reglement: Number(row[4]) || 0,
-      obs: String(row[5] || '')
+      reglement:Number(row[4]) || 0,
+      obs:      String(row[5] || ''),
+      refVers:  String(row[6] || '')  // V-001 si versé, '' sinon
     }))
     .filter(r => r.date !== '' || r.libelle !== '')
     .reverse();
 }
 
-/** Ajoute une saisie dans la feuille du chantier */
+/** Ajoute une saisie (ne touche pas la col G) */
 function ajouterSaisie(nomChantier, saisie) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = ss.getSheetByName(nomChantier);
   if (!sh) throw new Error('Chantier "' + nomChantier + '" introuvable');
-
   const dateValue = saisie.date ? new Date(saisie.date + 'T12:00:00') : new Date();
   sh.appendRow([
     dateValue,
-    saisie.libelle || '',
-    saisie.charges ? Number(saisie.charges) : '',
+    saisie.libelle  || '',
+    saisie.charges  ? Number(saisie.charges)  : '',
     saisie.produits ? Number(saisie.produits) : '',
     '',
     saisie.obs || ''
@@ -408,17 +385,16 @@ function ajouterSaisie(nomChantier, saisie) {
   return { success: true };
 }
 
-/** Modifie une saisie existante (par numéro de ligne) */
+/** Modifie une saisie existante (ne touche pas la col G) */
 function modifierSaisie(nomChantier, rowNum, saisie) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = ss.getSheetByName(nomChantier);
   if (!sh) throw new Error('Chantier introuvable');
-
   const dateValue = saisie.date ? new Date(saisie.date + 'T12:00:00') : new Date();
   sh.getRange(rowNum, 1, 1, 6).setValues([[
     dateValue,
-    saisie.libelle || '',
-    saisie.charges ? Number(saisie.charges) : '',
+    saisie.libelle  || '',
+    saisie.charges  ? Number(saisie.charges)  : '',
     saisie.produits ? Number(saisie.produits) : '',
     '',
     saisie.obs || ''
@@ -436,34 +412,170 @@ function supprimerSaisie(nomChantier, rowNum) {
 }
 
 // ═══════════════════════════════════════════════
-//  API POUR NETLIFY (handleAPI_)
+//  VERSEMENTS — FONCTIONS API
+// ═══════════════════════════════════════════════
+
+/**
+ * Retourne tous les versements d'un chantier avec calcul des charges couvertes.
+ */
+function getVersements(nomChantier) {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const shV = ss.getSheetByName(FEUILLE_VERSEMENTS);
+  if (!shV || shV.getLastRow() < 2) return [];
+
+  const rows = shV.getRange(2, 1, shV.getLastRow() - 1, 5).getValues();
+  const tz   = Session.getScriptTimeZone();
+
+  // Lire les données du chantier (col G incluse)
+  const chSh = ss.getSheetByName(nomChantier);
+  let chData = [];
+  if (chSh && chSh.getLastRow() >= 2) {
+    const nCols = Math.max(chSh.getLastColumn(), COL_REF_VERS);
+    chData = chSh.getRange(2, 1, chSh.getLastRow() - 1, nCols).getValues();
+  }
+
+  return rows
+    .filter(r => String(r[2]) === nomChantier && r[0] !== '')
+    .map(r => {
+      const id = String(r[0]);
+
+      // Charges couvertes par ce versement
+      const chargesCouvertes = chData
+        .filter(cr => String(cr[COL_REF_VERS - 1] || '') === id)
+        .reduce((s, cr) => s + (Number(cr[2]) || 0), 0);
+
+      // Détail des charges (libellé + montant)
+      const details = chData
+        .filter(cr => String(cr[COL_REF_VERS - 1] || '') === id && Number(cr[2]) > 0)
+        .map(cr => ({ libelle: String(cr[1] || ''), montant: Number(cr[2]) || 0 }));
+
+      return {
+        id,
+        date:             (r[1] instanceof Date) ? Utilities.formatDate(r[1], tz, 'yyyy-MM-dd') : String(r[1] || ''),
+        chantier:         String(r[2] || ''),
+        montant:          Number(r[3]) || 0,
+        obs:              String(r[4] || ''),
+        chargesCouvertes,
+        solde:            (Number(r[3]) || 0) - chargesCouvertes,
+        details
+      };
+    });
+}
+
+/**
+ * Retourne les charges (col C > 0) sans versement associé.
+ * Utilisé pour remplir la checklist du formulaire Nouveau Versement.
+ */
+function getChargesSansVersement(nomChantier) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName(nomChantier);
+  if (!sh || sh.getLastRow() < 2) return [];
+
+  const nCols = Math.max(sh.getLastColumn(), COL_REF_VERS);
+  const data  = sh.getRange(2, 1, sh.getLastRow() - 1, nCols).getValues();
+  const tz    = Session.getScriptTimeZone();
+
+  return data
+    .map((row, idx) => ({
+      rowNum:  idx + 2,
+      date:    (row[0] instanceof Date) ? Utilities.formatDate(row[0], tz, 'yyyy-MM-dd') : String(row[0] || ''),
+      libelle: String(row[1] || ''),
+      charges: Number(row[2]) || 0,
+      refVers: String(row[COL_REF_VERS - 1] || '')
+    }))
+    .filter(r => r.charges > 0 && r.libelle !== '' && r.refVers === '');
+}
+
+/**
+ * Crée un versement et marque les lignes sélectionnées dans la feuille chantier.
+ * versement = { date, montant, obs, rowNums: [2,5,7] }
+ */
+function ajouterVersement(nomChantier, versement) {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  let   shV = ss.getSheetByName(FEUILLE_VERSEMENTS);
+  if (!shV) shV = creerFeuilleVersements_(ss);
+
+  // Générer l'ID : V-XXX basé sur nombre de lignes actuelles
+  const lastRow = shV.getLastRow(); // 1 = seulement header → prochain = V-001
+  const id = 'V-' + String(lastRow).padStart(3, '0');
+
+  const dateVal = versement.date ? new Date(versement.date + 'T12:00:00') : new Date();
+  shV.appendRow([id, dateVal, nomChantier, Number(versement.montant) || 0, versement.obs || '']);
+
+  // Écrire la Réf_Vers dans col G des lignes concernées
+  if (versement.rowNums && versement.rowNums.length > 0) {
+    const chSh = ss.getSheetByName(nomChantier);
+    if (!chSh) throw new Error('Chantier introuvable');
+
+    // S'assurer que la col G existe
+    while (chSh.getMaxColumns() < COL_REF_VERS) {
+      chSh.insertColumnAfter(chSh.getMaxColumns());
+    }
+    // Maintenir la col G cachée
+    try { chSh.showColumns(COL_REF_VERS); chSh.hideColumns(COL_REF_VERS); } catch(e) {}
+
+    versement.rowNums.forEach(rn => {
+      if (rn >= 2) chSh.getRange(rn, COL_REF_VERS).setValue(id);
+    });
+  }
+
+  return { success: true, id };
+}
+
+/**
+ * Supprime un versement et efface les références dans la feuille chantier.
+ */
+function supprimerVersement(nomChantier, versementId) {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const shV = ss.getSheetByName(FEUILLE_VERSEMENTS);
+  if (!shV) return { success: false };
+
+  // Supprimer la ligne dans Versements
+  const data = shV.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === versementId) {
+      shV.deleteRow(i + 1);
+      break;
+    }
+  }
+
+  // Effacer les Réf_Vers dans la feuille chantier
+  const chSh = ss.getSheetByName(nomChantier);
+  if (chSh && chSh.getLastRow() >= 2 && chSh.getMaxColumns() >= COL_REF_VERS) {
+    const refs = chSh.getRange(2, COL_REF_VERS, chSh.getLastRow() - 1, 1).getValues();
+    refs.forEach((row, idx) => {
+      if (String(row[0]) === versementId) {
+        chSh.getRange(idx + 2, COL_REF_VERS).setValue('');
+      }
+    });
+  }
+
+  return { success: true };
+}
+
+// ═══════════════════════════════════════════════
+//  API DISPATCHER
 // ═══════════════════════════════════════════════
 
 function handleAPI_(action, paramsStr) {
   try {
     var params = {};
-    if (paramsStr) {
-      params = JSON.parse(paramsStr);
-    }
+    if (paramsStr) params = JSON.parse(paramsStr);
     var result = null;
 
-    if (action === 'getChantiers') {
-      result = getChantiers();
-    } else if (action === 'getSaisies') {
-      result = getSaisies(params.chantier);
-    } else if (action === 'getLibellesForChantier') {
-      result = getLibellesForChantier(params.chantier, params.mode);
-    } else if (action === 'ajouterSaisie') {
-      result = ajouterSaisie(params.chantier, params.saisie);
-    } else if (action === 'modifierSaisie') {
-      result = modifierSaisie(params.chantier, params.rowNum, params.saisie);
-    } else if (action === 'supprimerSaisie') {
-      result = supprimerSaisie(params.chantier, params.rowNum);
-    } else {
-      throw new Error("Action inconnue: " + action);
-    }
+    if      (action === 'getChantiers')            result = getChantiers();
+    else if (action === 'getSaisies')              result = getSaisies(params.chantier);
+    else if (action === 'getLibellesForChantier')  result = getLibellesForChantier(params.chantier, params.mode);
+    else if (action === 'ajouterSaisie')           result = ajouterSaisie(params.chantier, params.saisie);
+    else if (action === 'modifierSaisie')          result = modifierSaisie(params.chantier, params.rowNum, params.saisie);
+    else if (action === 'supprimerSaisie')         result = supprimerSaisie(params.chantier, params.rowNum);
+    else if (action === 'getVersements')           result = getVersements(params.chantier);
+    else if (action === 'getChargesSansVersement') result = getChargesSansVersement(params.chantier);
+    else if (action === 'ajouterVersement')        result = ajouterVersement(params.chantier, params.versement);
+    else if (action === 'supprimerVersement')      result = supprimerVersement(params.chantier, params.versementId);
+    else throw new Error('Action inconnue: ' + action);
 
-    return ContentService.createTextOutput(JSON.stringify({ result: result }))
+    return ContentService.createTextOutput(JSON.stringify({ result }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
@@ -481,5 +593,3 @@ function doPost(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
-
-
