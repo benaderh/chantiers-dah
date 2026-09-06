@@ -149,8 +149,12 @@
     .vd-sub{font-size:11px;color:var(--mut);margin-top:1px}
     .vd-amt{font-size:14px;font-weight:700;color:var(--rd)}
     .vd-empty{font-size:13px;color:var(--mut);font-style:italic;padding:6px 0}
-    .vcard-actions{padding:8px 14px 12px}
-    .vbtn-del{width:100%;padding:10px;background:transparent;border:1.5px solid var(--rd);
+    .vcard-actions{display:flex;gap:8px;padding:8px 14px 12px}
+    .vbtn-mod{flex:1;padding:10px;background:transparent;border:1.5px solid var(--org);
+      border-radius:10px;color:var(--org);font-size:13px;font-weight:700;
+      font-family:inherit;cursor:pointer;transition:all .2s}
+    .vbtn-mod:active{background:rgba(243,156,18,.1)}
+    .vbtn-del{flex:1;padding:10px;background:transparent;border:1.5px solid var(--rd);
       border-radius:10px;color:var(--rd);font-size:13px;font-weight:700;
       font-family:inherit;cursor:pointer;transition:all .2s}
     .vbtn-del:active{background:rgba(255,107,107,.1)}
@@ -187,8 +191,9 @@
     .bsheet{position:fixed;bottom:0;left:0;right:0;z-index:100;
       background:var(--card);border-top-left-radius:22px;border-top-right-radius:22px;
       padding:12px 18px calc(24px + var(--sb));
-      transform:translateY(100%);transition:transform .4s cubic-bezier(.32,.72,0,1);
-      max-height:92vh;overflow-y:auto;box-shadow:0 -6px 40px rgba(0,0,0,.5)}
+      transform:translateY(100%);transition:transform .4s cubic-bezier(.32,.72,0,1),bottom .25s ease;
+      max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+      box-shadow:0 -6px 40px rgba(0,0,0,.5)}
     .bsheet.on{transform:translateY(0)}
     .hdl{width:38px;height:4px;border-radius:2px;background:var(--brd);margin:0 auto 14px}
     .bsheet h2{font-size:19px;font-weight:800;color:var(--wh);margin-bottom:16px;text-align:center}
@@ -233,6 +238,14 @@
       color:var(--rd);font-size:15px;font-weight:700;font-family:inherit;
       cursor:pointer;margin-top:8px;transition:all .2s}
     .btn-del:active{background:rgba(255,107,107,.1);transform:scale(.97)}
+    .btn-cancel{width:100%;padding:13px;min-height:50px;
+      background:transparent;border:1.5px solid var(--brd);border-radius:12px;
+      color:var(--mut);font-size:15px;font-weight:600;font-family:inherit;
+      cursor:pointer;margin-top:8px;transition:all .2s}
+    .btn-cancel:active{background:rgba(255,255,255,.05)}
+    /* Hint long-press */
+    .row::after,.vcard::after{content:'';}
+    .lp-hint{position:absolute;top:6px;right:8px;font-size:9px;color:var(--brd);pointer-events:none;}
 
     /* ═══ CALCUL VERSEMENT ═══ */
     .v-calc{background:var(--card2);border-radius:12px;padding:11px 13px;
@@ -386,6 +399,7 @@
     </div>
     <button type="submit" class="btn-s" id="btn"><span>✓ Enregistrer</span><div class="sp"></div></button>
     <button type="button" class="btn-del" id="btn-del" style="display:none" onclick="doDelete()">🗑 Supprimer</button>
+    <button type="button" class="btn-cancel" onclick="closeAll()">✕ Annuler</button>
   </form>
 </div>
 
@@ -431,6 +445,32 @@
   <button type="button" class="btn-s org" id="btn-v" onclick="submitVersement()">
     <span>💸 Créer le versement</span><div class="sp"></div>
   </button>
+  <button type="button" class="btn-cancel" onclick="closeAll()">✕ Annuler</button>
+</div>
+
+<!-- ═══ BOTTOM SHEET : Modifier Versement ═══ -->
+<div id="sh-edit-v" class="bsheet">
+  <div class="hdl"></div>
+  <h2 style="color:var(--org)">&#9998; Versement&nbsp;<span id="fev-id" style="font-weight:800"></span></h2>
+  <div class="fr2">
+    <div class="fg">
+      <label for="fev-d">Date versement</label>
+      <input type="date" id="fev-d">
+    </div>
+    <div class="fg">
+      <label for="fev-m">Montant versé</label>
+      <input type="number" id="fev-m" min="0" step="1" inputmode="numeric" placeholder="0">
+    </div>
+  </div>
+  <div class="fg">
+    <label for="fev-o">Observation</label>
+    <input type="text" id="fev-o" placeholder="Optionnel…">
+  </div>
+  <button type="button" class="btn-s org" id="btn-ev" onclick="submitEditVersement()">
+    <span>✓ Modifier le versement</span><div class="sp"></div>
+  </button>
+  <button type="button" class="btn-del" onclick="deleteFromEditVers()">&#128465; Supprimer ce versement</button>
+  <button type="button" class="btn-cancel" onclick="closeAll()">✕ Annuler</button>
 </div>
 
 <!-- TOAST -->
@@ -443,7 +483,7 @@
 var S = {
   chantiers:[], active:null, mode:null,
   saisies:[], libelles:[], editRow:null,
-  versements:[], chargesPourVers:[]
+  versements:[], chargesPourVers:[], editVers:null
 };
 var _tt = null;
 var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxGzdecUXhdVi6LbcL92UZ1vQCP-nxN9IMpfSAr-SQjhLS1qhB78CYv77Yvbf4pJhM/exec";
@@ -607,9 +647,10 @@ function renderHistory(){
 
     // Classe de la ligne
     var rowCls='row';
+    var isVersee = false;
     if(s.charges>0){
       if(s.reglement>=s.charges) rowCls='row payee';
-      else if(s.refVers) rowCls='row versee';
+      else if(s.refVers) { rowCls='row versee'; isVersee = true; }
     }
 
     // Barre de progression (mode C ou toutes)
@@ -619,7 +660,9 @@ function renderHistory(){
       barHtml='<div class="rgl-bar"><div class="rgl-fill" style="width:'+pct+'%"></div></div>';
     }
 
-    h+='<div class="'+rowCls+'" style="animation-delay:'+(i*.02)+'s" ondblclick="editRow('+s.rowNum+')">'+
+    var dataAction = isVersee ? 'versee' : String(s.rowNum);
+
+    h+='<div class="'+rowCls+'" data-action="'+dataAction+'" style="animation-delay:'+(i*.02)+'s">'+
       '<div class="r1">'+
         '<span class="lib">'+escH(s.libelle||'—')+vBadge+rglBadge+'</span>'+
         '<span class="dcol">'+fW(s.date)+'<br>'+fD(s.date)+'</span>'+
@@ -634,6 +677,7 @@ function renderHistory(){
     '</div>';
   });
   list.innerHTML=h;
+  attachHistoryEvents();
 }
 
 /* ═══════════════════════════════════════
@@ -678,7 +722,7 @@ function renderVersements(){
       detHtml='<div class="vd-empty">Aucune charge associée</div>';
     }
 
-    h+='<div class="vcard" style="animation-delay:'+(i*.05)+'s">'+
+    h+='<div class="vcard" data-vid="'+escH(v.id)+'" style="animation-delay:'+(i*.05)+'s">'+
       '<div class="vcard-hd" onclick="toggleVDetail(\'vd'+i+'\')">'+
         '<span class="vcard-id">'+v.id+'</span>'+
         '<span class="vcard-date">'+fD(v.date)+'</span>'+
@@ -694,18 +738,62 @@ function renderVersements(){
           '<div class="vd-hd">Charges réglées avec ce versement</div>'+
           detHtml+
           '<div class="vcard-actions">'+
-            '<button class="vbtn-del" onclick="deleteVersement(\''+v.id+'\')">🗑 Supprimer ce versement</button>'+
+            '<button class="vbtn-mod" onclick="editVersement(\''+v.id+'\')">✏️ Modifier</button>'+
+            '<button class="vbtn-del" onclick="deleteVersement(\''+v.id+'\')">🗑 Supprimer</button>'+
           '</div>'+
         '</div>'+
       '</div>'+
     '</div>';
   });
   list.innerHTML=h;
+  attachVersementEvents();
 }
 
 function toggleVDetail(id){
   var el=$(id);
   if(el) el.classList.toggle('on');
+}
+
+/* ═══════════════════════════════════════
+   LONG PRESS / DOUBLE CLICK HELPER
+═══════════════════════════════════════ */
+/* Attache long-press (mobile) + dblclick (desktop) sur un élément */
+function attachLongPress(el, callback) {
+  var timer = null, moved = false;
+  el.addEventListener('touchstart', function() {
+    moved = false;
+    timer = setTimeout(function() { if (!moved) callback(); }, 500);
+  }, { passive: true });
+  el.addEventListener('touchmove', function() {
+    moved = true;
+    clearTimeout(timer);
+  }, { passive: true });
+  el.addEventListener('touchend',   function() { clearTimeout(timer); }, { passive: true });
+  el.addEventListener('touchcancel',function() { clearTimeout(timer); }, { passive: true });
+  // Long-press uniquement sur mobile — pas de dblclick
+}
+
+function attachHistoryEvents() {
+  document.querySelectorAll('#hist .row').forEach(function(el) {
+    var action = el.getAttribute('data-action');
+    if (!action) return;
+    var fn;
+    if (action === 'versee') {
+      fn = function() { toast('Cette charge est liée à un versement. Modification impossible ici.', 'er'); };
+    } else {
+      var rowNum = parseInt(action, 10);
+      fn = function() { editRow(rowNum); };
+    }
+    attachLongPress(el, fn);
+  });
+}
+
+function attachVersementEvents() {
+  document.querySelectorAll('#vlist .vcard').forEach(function(el) {
+    var vid = el.getAttribute('data-vid');
+    if (!vid) return;
+    attachLongPress(el, function() { editVersement(vid); });
+  });
 }
 
 /* ═══ Form Versement ═══ */
@@ -830,10 +918,53 @@ function deleteVersement(vid){
   callAPI('supprimerVersement',{chantier:S.active, versementId:vid})
     .then(function(){
       toast('Versement supprimé','ok');
+      closeAll();
       loadVersements();
       callAPI('getSaisies',{chantier:S.active}).then(function(d){ S.saisies=d||[]; renderHistory(); });
     })
     .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+/* ═══════════════════════════════════════
+   ÉDITION VERSEMENT
+═══════════════════════════════════════ */
+function editVersement(vid) {
+  var v = null;
+  S.versements.forEach(function(x) { if (x.id === vid) v = x; });
+  if (!v) return;
+  S.editVers = v;
+  $('fev-id').textContent = v.id;
+  $('fev-d').value  = v.date  || today();
+  $('fev-m').value  = v.montant || '';
+  $('fev-o').value  = v.obs   || '';
+  $('ov').classList.add('on');
+  $('sh-edit-v').classList.add('on');
+}
+
+function submitEditVersement() {
+  if (!S.editVers || !S.active) return;
+  var montant = parseFloat($('fev-m').value) || 0;
+  if (!montant) { toast('Saisissez le montant versé', 'er'); return; }
+  var btn = $('btn-ev'); btn.classList.add('ld'); btn.disabled = true;
+  callAPI('modifierVersement', {
+    chantier: S.active,
+    versementId: S.editVers.id,
+    data: { date: $('fev-d').value, montant: montant, obs: $('fev-o').value }
+  })
+    .then(function() {
+      btn.classList.remove('ld'); btn.disabled = false;
+      closeAll();
+      toast('✓ Versement modifié', 'ok');
+      loadVersements();
+    })
+    .catch(function(e) { btn.classList.remove('ld'); btn.disabled = false; toast('Erreur : ' + e.message, 'er'); });
+}
+
+function deleteFromEditVers() {
+  if (!S.editVers) return;
+  var vid = S.editVers.id;
+  closeAll();
+  deleteVersement(vid);
 }
 
 /* ═══════════════════════════════════════
@@ -952,6 +1083,7 @@ function closeAll(){
   $('ov').classList.remove('on');
   $('sh').classList.remove('on');
   $('sh-v').classList.remove('on');
+  $('sh-edit-v').classList.remove('on');
 }
 
 function submitForm(e){
@@ -1018,12 +1150,15 @@ function setupPWA(){
         .catch(function(e){ console.log('SW fail:',e); });
     });
   }
-  // Bloquer zoom
+  // Bloquer zoom (sauf dans les champs de saisie)
   document.addEventListener('gesturestart',  function(e){ e.preventDefault(); },{passive:false});
   document.addEventListener('gesturechange', function(e){ e.preventDefault(); },{passive:false});
   document.addEventListener('gestureend',    function(e){ e.preventDefault(); },{passive:false});
   var lastTap=0;
   document.addEventListener('touchend',function(e){
+    var t=e.target;
+    // Ne pas bloquer double-tap sur les champs de saisie
+    if(t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA') return;
     var now=Date.now();
     if(now-lastTap<300&&e.touches.length===0) e.preventDefault();
     lastTap=now;
@@ -1041,10 +1176,38 @@ function setupPWA(){
 }
 
 /* ═══════════════════════════════════════
+   FIX CLAVIER — empêche le clavier virtuel de cacher les champs
+═══════════════════════════════════════ */
+function setupKeyboardFix() {
+  // 1. ScrollIntoView quand un champ est focalisé dans un bottom sheet
+  document.addEventListener('focusin', function(e) {
+    var t = e.target;
+    if ((t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA') &&
+        t.closest && t.closest('.bsheet')) {
+      setTimeout(function() {
+        t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 400);
+    }
+  });
+  // 2. visualViewport API : ajuster la position des bsheets selon la hauteur du clavier
+  if (window.visualViewport) {
+    function onVVResize() {
+      var offset = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+      document.querySelectorAll('.bsheet').forEach(function(el) {
+        el.style.bottom = offset + 'px';
+      });
+    }
+    window.visualViewport.addEventListener('resize', onVVResize);
+    window.visualViewport.addEventListener('scroll', onVVResize);
+  }
+}
+
+/* ═══════════════════════════════════════
    INIT
 ═══════════════════════════════════════ */
 function init(){
   setupPWA();
+  setupKeyboardFix();
   callAPI('getChantiers',{})
     .then(function(list){
       S.chantiers=list||[];

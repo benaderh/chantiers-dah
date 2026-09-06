@@ -585,6 +585,27 @@ function supprimerVersement(nomChantier, versementId) {
   return { success: true };
 }
 
+/**
+ * Modifie date, montant et obs d'un versement sans toucher aux refs col G.
+ */
+function modifierVersement(nomChantier, versementId, data) {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const shV = ss.getSheetByName(FEUILLE_VERSEMENTS);
+  if (!shV) return { success: false, error: 'Feuille Versements introuvable' };
+
+  const rows = shV.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === versementId) {
+      const dateVal = data.date ? new Date(data.date + 'T12:00:00') : new Date();
+      shV.getRange(i + 1, 2).setValue(dateVal);
+      shV.getRange(i + 1, 4).setValue(Number(data.montant) || 0);
+      shV.getRange(i + 1, 5).setValue(data.obs || '');
+      return { success: true };
+    }
+  }
+  return { success: false, error: 'Versement ' + versementId + ' introuvable' };
+}
+
 // ═══════════════════════════════════════════════
 //  API DISPATCHER
 // ═══════════════════════════════════════════════
@@ -605,6 +626,7 @@ function handleAPI_(action, paramsStr) {
       case 'getChargesPourVersement': result = getChargesPourVersement(params.chantier);                 break;
       case 'ajouterVersement':        result = ajouterVersement(params.chantier, params.versement);      break;
       case 'supprimerVersement':      result = supprimerVersement(params.chantier, params.versementId);  break;
+      case 'modifierVersement':       result = modifierVersement(params.chantier, params.versementId, params.data); break;
       default: throw new Error('Action inconnue: ' + action);
     }
 
