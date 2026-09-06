@@ -1385,31 +1385,37 @@ function init(){
 }
 
 function doLogin() {
-  var nom = $('login-nom').value.trim();
-  var pin = $('login-pin').value.trim();
-  if(!nom) { toast('Entrez votre Nom', 'er'); return; }
-  if(!pin) { toast('Entrez votre PIN', 'er'); return; }
-  
-  var btn = $('btn-login'); btn.classList.add('ld'); btn.disabled = true;
-  callAPI('login', { nom: nom, pin: pin })
-    .then(function(res) {
-      btn.classList.remove('ld'); btn.disabled = false;
-      if (res.success) {
-        S.user = res.user;
-        try {
-          localStorage.setItem('chantierCredentials', JSON.stringify({ nom: nom, pin: pin }));
-        } catch(e) {}
-        $('login-ov').style.display = 'none';
-        $('login-pin').value = '';
-        startApp();
-      } else {
-        toast(res.error || 'Erreur d\'authentification', 'er');
-      }
-    })
-    .catch(function(e){
-      btn.classList.remove('ld'); btn.disabled = false;
-      toast(e.message, 'er');
-    });
+  try {
+    var nom = $('login-nom').value.trim();
+    var pin = $('login-pin').value.trim();
+    if(!nom) { toast('Entrez votre Nom', 'er'); return; }
+    if(!pin) { toast('Entrez votre PIN', 'er'); return; }
+    
+    var btn = $('btn-login'); btn.classList.add('ld'); btn.disabled = true;
+    callAPI('login', { nom: nom, pin: pin })
+      .then(function(res) {
+        btn.classList.remove('ld'); btn.disabled = false;
+        if (res.success) {
+          S.user = res.user;
+          try {
+            localStorage.setItem('chantierCredentials', JSON.stringify({ nom: nom, pin: pin }));
+          } catch(e) {}
+          $('login-ov').style.display = 'none';
+          $('login-pin').value = '';
+          startApp();
+        } else {
+          toast(res.error || 'Erreur d\'authentification', 'er');
+          alert("Login refusé : " + (res.error || 'Erreur d\'authentification'));
+        }
+      })
+      .catch(function(e){
+        btn.classList.remove('ld'); btn.disabled = false;
+        toast(e.message, 'er');
+        alert("Erreur de connexion : " + e.message);
+      });
+  } catch (err) {
+    alert("Erreur Javascript : " + err.message);
+  }
 }
 
 function doLogout() {
