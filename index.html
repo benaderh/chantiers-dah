@@ -482,6 +482,9 @@
     <label for="fev-o">Observation</label>
     <input type="text" id="fev-o" placeholder="Optionnel…">
   </div>
+  <div class="v-charges-hd" style="margin-top:15px;margin-bottom:8px;font-size:13px;font-weight:700;color:var(--mut);">Charges liées à ce versement :</div>
+  <div id="fev-charges-list" style="margin-bottom:15px;background:var(--card2);border-radius:12px;padding:4px 12px;border:1px solid var(--brd);"></div>
+
   <div class="form-actions">
     <button type="button" class="btn-s org" id="btn-ev" onclick="submitEditVersement()">
       <span>✓ Modifier</span><div class="sp"></div>
@@ -955,6 +958,19 @@ function editVersement(vid) {
   $('fev-d').value  = v.date  || today();
   $('fev-m').value  = v.montant || '';
   $('fev-o').value  = v.obs   || '';
+  
+  var detHtml='';
+  if(v.details && v.details.length>0){
+    v.details.forEach(function(d){
+      var sub = d.tranche ? '(tranche: '+fN(d.tranche)+')' : 'Charge totale: '+fN(d.charge);
+      detHtml+='<div class="vd-item" style="border-bottom:1px solid rgba(255,255,255,0.05);padding:8px 0;display:flex;justify-content:space-between;align-items:center;"><div><div class="vd-lib" style="font-size:14px;font-weight:600;color:var(--wh);">'+escH(d.libelle)+'</div><div class="vd-sub" style="font-size:11px;color:var(--mut);">'+sub+'</div></div>'+
+        '<span class="vd-amt" style="font-size:14px;font-weight:700;color:var(--rd);">'+(d.tranche?fN(d.tranche):fN(d.charge))+'</span></div>';
+    });
+  } else {
+    detHtml='<div class="vd-empty" style="font-size:13px;color:var(--mut);font-style:italic;padding:8px 0;">Aucune charge associée</div>';
+  }
+  $('fev-charges-list').innerHTML = detHtml;
+  
   $('ov').classList.add('on');
   $('sh-edit-v').classList.add('on');
 }
