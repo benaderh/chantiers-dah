@@ -329,6 +329,28 @@
   <p>Chargement<span class="dt"></span></p>
 </div>
 
+<!-- LOGIN OVERLAY -->
+<div id="login-ov" style="position:fixed;inset:0;background:var(--bg);z-index:900;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--card);padding:30px 20px;border-radius:20px;width:100%;max-width:320px;border:1px solid var(--brd);box-shadow:0 10px 40px rgba(0,0,0,0.5);text-align:center;">
+    <div style="width:54px;height:54px;background:var(--hdr);border-radius:14px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px;">
+      <svg viewBox="0 0 400 400" width="36" fill="none">
+        <path d="M200 250 L145 140" stroke="#e94560" stroke-width="20" stroke-linecap="round"/>
+        <path d="M145 140 L95 250"  stroke="#e94560" stroke-width="16" stroke-linecap="round"/>
+        <path d="M80 240 L75 278 L122 278 L117 240" fill="#e94560"/>
+      </svg>
+    </div>
+    <h2 style="color:var(--wh);margin-bottom:6px;font-size:20px;font-weight:800;">Connexion</h2>
+    <p style="color:var(--mut);font-size:13px;margin-bottom:20px;">Veuillez entrer votre code PIN</p>
+    
+    <div class="fg" style="text-align:left;margin-bottom:16px;">
+      <input type="password" id="login-pin" inputmode="numeric" placeholder="••••" style="text-align:center;font-size:22px;letter-spacing:10px;padding:12px;border-radius:12px;" onkeypress="if(event.key==='Enter') doLogin()">
+    </div>
+    <button class="btn-s" id="btn-login" onclick="doLogin()">
+      <span>Valider</span><div class="sp"></div>
+    </button>
+  </div>
+</div>
+
 <!-- APP -->
 <div id="app">
   <div id="lbar" class="lb" style="display:none"></div>
@@ -346,8 +368,8 @@
         <circle cx="350" cy="335" r="14" fill="#e94560"/>
       </svg>
     </div>
-    <h1 style="flex:1">Saisie Chantier</h1>
-    <button class="btn-quit" onclick="window.close()">✕ Quitter</button>
+    <h1 style="flex:1" id="app-title">Saisie Chantier</h1>
+    <button class="btn-quit" onclick="doLogout()">Déconnexion</button>
   </header>
 
   <nav id="tnav"><div id="tabs"></div></nav>
@@ -502,6 +524,7 @@
    STATE
 ═══════════════════════════════════════ */
 var S = {
+  user: null,
   chantiers:[], active:null, mode:null,
   saisies:[], libelles:[], editRow:null,
   versements:[], chargesPourVers:[], editVers:null
@@ -1326,12 +1349,69 @@ function setupKeyboardFix() {
 function init(){
   setupPWA();
   setupKeyboardFix();
+  var savedUser = null;
+  try {
+    savedUser = localStorage.getItem('chantierUser');
+  } catch(e) {
+    console.warn("localStorage n'est pas disponible :", e);
+  }
+  
+  if (savedUser) {
+    S.user = JSON.parse(savedUser);
+    startApp();
+  } else {
+    $('ld').classList.add('h');
+    $('login-ov').style.display = 'flex';
+  }
+}
+
+function doLogin() {
+  var pin = $('login-pin').value.trim();
+  if(!pin) { toast('Entrez votre PIN', 'er'); return; }
+  
+  var btn = $('btn-login'); btn.classList.add('ld'); btn.disabled = true;
+  callAPI('login', { pin: pin })
+    .then(function(res) {
+      btn.classList.remove('ld'); btn.disabled = false;
+      if (res.success) {
+        S.user = res.user;
+        localStorage.setItem('chantierUser', JSON.stringify(S.user));
+        $('login-ov').style.display = 'none';
+        $('login-pin').value = '';
+        startApp();
+      } else {
+        toast(res.error || 'Erreur PIN', 'er');
+      }
+    })
+    .catch(function(e){
+      btn.classList.remove('ld'); btn.disabled = false;
+      toast(e.message, 'er');
+    });
+}
+
+function doLogout() {
+  S.user = null;
+  localStorage.removeItem('chantierUser');
+  $('app').classList.remove('on');
+  $('login-ov').style.display = 'flex';
+}
+
+function startApp(){
+  $('ld').classList.remove('h');
+  $('app-title').textContent = 'Chantier - ' + S.user.nom;
+  
   callAPI('getChantiers',{})
     .then(function(list){
-      S.chantiers=list||[];
+      if (S.user.role === 'admin' || S.user.chantiers === '*') {
+        S.chantiers = list || [];
+      } else {
+        var userChants = S.user.chantiers.split(',').map(function(c){ return c.trim(); });
+        S.chantiers = (list || []).filter(function(c) { return userChants.indexOf(c) !== -1; });
+      }
+
       if(!S.chantiers.length){
         $('ld').classList.add('h'); $('app').classList.add('on');
-        toast('Aucun chantier trouvé','er'); return;
+        toast('Aucun chantier autorisé','er'); return;
       }
       S.active=S.chantiers[0];
       renderTabs(); updateModeUI(); loadData(S.active);
