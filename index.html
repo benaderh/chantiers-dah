@@ -959,37 +959,119 @@ function editVersement(vid) {
   $('fev-m').value  = v.montant || '';
   $('fev-o').value  = v.obs   || '';
   
-  var detHtml='';
-  if(v.details && v.details.length>0){
-    v.details.forEach(function(d){
-      var sub = d.tranche ? '(tranche: '+fN(d.tranche)+')' : 'Charge totale: '+fN(d.charge);
-      detHtml+='<div class="vd-item" style="border-bottom:1px solid rgba(255,255,255,0.05);padding:8px 0;display:flex;justify-content:space-between;align-items:center;"><div><div class="vd-lib" style="font-size:14px;font-weight:600;color:var(--wh);">'+escH(d.libelle)+'</div><div class="vd-sub" style="font-size:11px;color:var(--mut);">'+sub+'</div></div>'+
-        '<span class="vd-amt" style="font-size:14px;font-weight:700;color:var(--rd);">'+(d.tranche?fN(d.tranche):fN(d.charge))+'</span></div>';
-    });
-  } else {
-    detHtml='<div class="vd-empty" style="font-size:13px;color:var(--mut);font-style:italic;padding:8px 0;">Aucune charge associée</div>';
-  }
-  $('fev-charges-list').innerHTML = detHtml;
+  $('fev-charges-list').innerHTML = '<div class="vc-empty">Chargement des charges...</div>';
+  
+  callAPI('getChargesPourVersement', {chantier:S.active})
+    .then(function(list){
+      S.chargesPourEditVers = list||[];
+      renderEditVCharges();
+    })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
   
   $('ov').classList.add('on');
   $('sh-edit-v').classList.add('on');
+}
+
+function renderEditVCharges(){
+  var cont = $('fev-charges-list');
+  var vid = S.editVers.id;
+  if(!S.chargesPourEditVers || S.chargesPourEditVers.length===0){
+    cont.innerHTML='<div class="vc-empty">Aucune charge disponible</div>';
+    return;
+  }
+  var h='';
+  S.chargesPourEditVers.forEach(function(c, i){
+    var resteAPayer = c.charges - (c.reglement||0);
+    
+    // Vérifier si cette charge est liée au versement en cours
+    var isLinked = false;
+    var currentTranche = 0;
+    if (c.refVers) {
+      var refs = c.refVers.split(',').map(function(s){ return s.trim(); });
+      refs.forEach(function(r) {
+        var parts = r.split(':');
+        if (parts[0] === vid) {
+          isLinked = true;
+          currentTranche = parts[1] ? parseFloat(parts[1]) : 0;
+        }
+      });
+    }
+    
+    // Vérifier si elle est liée à d'AUTRES versements
+    var alreadyVerseeOther = false;
+    if (c.refVers) {
+      var refs2 = c.refVers.split(',').map(function(s){ return s.trim(); });
+      refs2.forEach(function(r) {
+        if (r.split(':')[0] !== vid && r !== '') alreadyVerseeOther = true;
+      });
+    }
+
+    var itemCls = 'vc-item' + (alreadyVerseeOther ? ' vc-already-versee':'');
+    var subLabel = c.reglement>0 ? 'Déjà payé: '+fN(c.reglement)+' | Reste: '+fN(resteAPayer) : fD(c.date);
+    
+    var checkedAttr = isLinked ? 'checked' : '';
+    var displayTranche = isLinked ? 'block' : 'none';
+    var trancheVal = currentTranche > 0 ? currentTranche : '';
+
+    h+='<div class="'+itemCls+'">'+
+      '<input type="checkbox" id="evc'+i+'" data-idx="'+i+'" data-charge="'+c.charges+'" data-reste="'+resteAPayer+'" '+checkedAttr+
+        ' onchange="onEditVCCheck(this)">'+
+      '<div class="vc-label">'+
+        '<div class="vc-lib">'+escH(c.libelle||'—')+'</div>'+
+        '<div class="vc-sub">'+subLabel+'</div>'+
+      '</div>'+
+      '<div class="vc-right">'+
+        '<div class="vc-amt">'+fN(c.charges)+'</div>'+
+        (resteAPayer<c.charges?'<div class="vc-reste">Reste: '+fN(resteAPayer)+'</div>':'')+
+      '</div>'+
+    '</div>'+
+    // Champ tranche
+    '<div class="vc-tranche" id="etr'+i+'" style="display:'+displayTranche+'">'+
+      '<label>Montant couvert (laisser vide = charge entière)</label>'+
+      '<input type="number" id="etrf'+i+'" min="0" max="'+c.charges+'" step="1" inputmode="numeric"'+
+        ' placeholder="'+resteAPayer+'" value="'+trancheVal+'">'+
+    '</div>';
+  });
+  cont.innerHTML=h;
+}
+
+function onEditVCCheck(cb){
+  var idx = cb.getAttribute('data-idx');
+  var tr  = $('etr'+idx);
+  if(tr) tr.style.display = cb.checked ? 'block' : 'none';
 }
 
 function submitEditVersement() {
   if (!S.editVers || !S.active) return;
   var montant = parseFloat($('fev-m').value) || 0;
   if (!montant) { toast('Saisissez le montant versé', 'er'); return; }
+  
+  var lignes = [];
+  var checks = $('fev-charges-list').querySelectorAll('input[type=checkbox]:checked');
+  checks.forEach(function(cb){
+    var idx = cb.getAttribute('data-idx');
+    var c = S.chargesPourEditVers[parseInt(idx, 10)];
+    var trf = $('etrf'+idx);
+    var tranche = trf ? (parseFloat(trf.value)||0) : 0;
+    var reste = parseFloat(cb.getAttribute('data-reste'))||0;
+    lignes.push({
+      rowNum: c.rowNum,
+      montant: tranche > 0 ? Math.min(tranche, reste) : 0
+    });
+  });
+
   var btn = $('btn-ev'); btn.classList.add('ld'); btn.disabled = true;
   callAPI('modifierVersement', {
     chantier: S.active,
     versementId: S.editVers.id,
-    data: { date: $('fev-d').value, montant: montant, obs: $('fev-o').value }
+    data: { date: $('fev-d').value, montant: montant, obs: $('fev-o').value, lignes: lignes }
   })
     .then(function() {
       btn.classList.remove('ld'); btn.disabled = false;
       closeAll();
       toast('✓ Versement modifié', 'ok');
       loadVersements();
+      callAPI('getSaisies',{chantier:S.active}).then(function(d){ S.saisies=d||[]; renderHistory(); });
     })
     .catch(function(e) { btn.classList.remove('ld'); btn.disabled = false; toast('Erreur : ' + e.message, 'er'); });
 }

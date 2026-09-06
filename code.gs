@@ -594,16 +594,51 @@ function modifierVersement(nomChantier, versementId, data) {
   if (!shV) return { success: false, error: 'Feuille Versements introuvable' };
 
   const rows = shV.getDataRange().getValues();
+  let found = false;
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][0]) === versementId) {
       const dateVal = data.date ? new Date(data.date + 'T12:00:00') : new Date();
       shV.getRange(i + 1, 2).setValue(dateVal);
       shV.getRange(i + 1, 4).setValue(Number(data.montant) || 0);
       shV.getRange(i + 1, 5).setValue(data.obs || '');
-      return { success: true };
+      found = true;
+      break;
     }
   }
-  return { success: false, error: 'Versement ' + versementId + ' introuvable' };
+  if (!found) return { success: false, error: 'Versement ' + versementId + ' introuvable' };
+
+  const chSh = ss.getSheetByName(nomChantier);
+  if (!chSh) return { success: true }; // Si chantier introuvable, on s'arrête là
+
+  // 1. Effacer les anciennes références de ce versement
+  if (chSh.getLastRow() >= 2 && chSh.getMaxColumns() >= COL_REF_VERS) {
+    const refs = chSh.getRange(2, COL_REF_VERS, chSh.getLastRow() - 1, 1).getValues();
+    refs.forEach((row, idx) => {
+      const refRaw = String(row[0] || '');
+      if (!refRaw) return;
+      const newRef = refRaw.split(',')
+        .filter(s => !s.trim().startsWith(versementId))
+        .join(',');
+      chSh.getRange(idx + 2, COL_REF_VERS).setValue(newRef);
+    });
+  }
+
+  // 2. Ajouter les nouvelles références si fournies
+  if (data.lignes && data.lignes.length > 0) {
+    while (chSh.getMaxColumns() < COL_REF_VERS) chSh.insertColumnAfter(chSh.getMaxColumns());
+    try { chSh.showColumns(COL_REF_VERS); chSh.hideColumns(COL_REF_VERS); } catch(e) {}
+
+    data.lignes.forEach(ligne => {
+      if (ligne.rowNum < 2) return;
+      const cell    = chSh.getRange(ligne.rowNum, COL_REF_VERS);
+      const existing = String(cell.getValue() || '').trim();
+      const newRef  = ligne.montant ? versementId + ':' + ligne.montant : versementId;
+      const updated = existing ? existing + ',' + newRef : newRef;
+      cell.setValue(updated);
+    });
+  }
+
+  return { success: true };
 }
 
 // ═══════════════════════════════════════════════
