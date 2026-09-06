@@ -17,6 +17,7 @@
 const HEADERS            = ['date', 'libelle', 'charges', 'produits', 'reglement', 'obs'];
 const FEUILLE_LISTES     = 'Listes';
 const FEUILLE_VERSEMENTS = 'Versements';
+const FEUILLE_USERS      = 'Users';
 const NB_COLS            = 6;
 const COL_REF_VERS       = 7; // Col G : références versements (ex: "V-001" ou "V-001:5000")
 
@@ -46,12 +47,14 @@ function configurerTout() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   creerFeuilleListes_(ss);
   creerFeuilleVersements_(ss);
+  creerFeuilleUsers_(ss);
   const listeData = lireListesData_(ss);
 
   const chantierSheets = [];
   ss.getSheets().forEach(sh => {
     if (sh.getName() === FEUILLE_LISTES)     return;
     if (sh.getName() === FEUILLE_VERSEMENTS) return;
+    if (sh.getName() === FEUILLE_USERS)      return;
     configurerFeuilleChantier_(sh, ss, listeData);
     chantierSheets.push(sh);
   });
@@ -89,7 +92,7 @@ function ajouterModuleVersements() {
   const modifiees = [];
   ss.getSheets().forEach(sh => {
     const nom = sh.getName();
-    if (nom === FEUILLE_LISTES || nom === FEUILLE_VERSEMENTS) return;
+    if (nom === FEUILLE_LISTES || nom === FEUILLE_VERSEMENTS || nom === FEUILLE_USERS) return;
 
     // Ajouter col G si besoin
     while (sh.getMaxColumns() < COL_REF_VERS) {
@@ -128,7 +131,7 @@ function testerAPI() {
   const colGStatus = [];
   ss.getSheets().forEach(sh => {
     const nom = sh.getName();
-    if (nom === FEUILLE_LISTES || nom === FEUILLE_VERSEMENTS) return;
+    if (nom === FEUILLE_LISTES || nom === FEUILLE_VERSEMENTS || nom === FEUILLE_USERS) return;
     const hasColG = sh.getMaxColumns() >= COL_REF_VERS;
     const isHidden = hasColG ? sh.isColumnHiddenByUser(COL_REF_VERS) : false;
     colGStatus.push(nom + ': Col G ' + (hasColG ? (isHidden ? '✅ cachée' : '⚠️ visible') : '❌ absente'));
@@ -217,6 +220,26 @@ function creerFeuilleVersements_(ss) {
     sh.getRange(2,4,500,1).setNumberFormat('# ##0');
     sh.setTabColor('#f39c12');
     sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+// ═══════════════════════════════════════════════
+//  FEUILLE USERS
+// ═══════════════════════════════════════════════
+
+function creerFeuilleUsers_(ss) {
+  let sh = ss.getSheetByName(FEUILLE_USERS);
+  if (!sh) {
+    sh = ss.insertSheet(FEUILLE_USERS);
+    sh.getRange(1, 1, 1, 4).setValues([['Nom', 'PIN', 'Role', 'Chantiers']])
+      .setBackground(THEME.headerBg).setFontColor(THEME.headerText)
+      .setFontWeight('bold').setHorizontalAlignment('center');
+    sh.setColumnWidth(1, 160); sh.setColumnWidth(2, 80);
+    sh.setColumnWidth(3, 100); sh.setColumnWidth(4, 300);
+    sh.setTabColor('#9b59b6');
+    sh.setFrozenRows(1);
+    sh.appendRow(['Admin Principal', '0000', 'admin', '*']);
   }
   return sh;
 }
@@ -319,7 +342,7 @@ function onOpen() {
 function onEdit(e) {
   if (!e || !e.range) return;
   const sh = e.range.getSheet();
-  if (sh.getName() === FEUILLE_LISTES || sh.getName() === FEUILLE_VERSEMENTS) return;
+  if (sh.getName() === FEUILLE_LISTES || sh.getName() === FEUILLE_VERSEMENTS || sh.getName() === FEUILLE_USERS) return;
   const row = e.range.getRow();
   if (row < 2) return;
   const cellDate = sh.getRange(row, 1);
@@ -346,7 +369,7 @@ function doGet(e) {
 
 function getChantiers() {
   return SpreadsheetApp.getActiveSpreadsheet().getSheets()
-    .filter(sh => sh.getName() !== FEUILLE_LISTES && sh.getName() !== FEUILLE_VERSEMENTS)
+    .filter(sh => sh.getName() !== FEUILLE_LISTES && sh.getName() !== FEUILLE_VERSEMENTS && sh.getName() !== FEUILLE_USERS)
     .map(sh => sh.getName());
 }
 
@@ -642,6 +665,33 @@ function modifierVersement(nomChantier, versementId, data) {
 }
 
 // ═══════════════════════════════════════════════
+//  API LOGIN
+// ═══════════════════════════════════════════════
+
+function apiLogin(nom, pin) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName(FEUILLE_USERS);
+  if (!sh || sh.getLastRow() < 2) return { success: false, error: 'Aucun utilisateur configuré (feuille Users manquante ou vide).' };
+
+  const data = sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues();
+  for (let i = 0; i < data.length; i++) {
+    const rowNom = String(data[i][0]).trim();
+    const rowPin = String(data[i][1]).trim();
+    if (rowNom.toLowerCase() === String(nom).trim().toLowerCase() && rowPin === String(pin).trim()) {
+      return {
+        success: true,
+        user: {
+          nom: rowNom,
+          role: String(data[i][2]).trim().toLowerCase(),
+          chantiers: String(data[i][3]).trim()
+        }
+      };
+    }
+  }
+  return { success: false, error: 'Nom ou PIN incorrect' };
+}
+
+// ═══════════════════════════════════════════════
 //  API DISPATCHER
 // ═══════════════════════════════════════════════
 
@@ -651,6 +701,7 @@ function handleAPI_(action, paramsStr) {
     let result = null;
 
     switch (action) {
+      case 'login':                   result = apiLogin(params.nom, params.pin);                                     break;
       case 'getChantiers':            result = getChantiers();                                           break;
       case 'getSaisies':              result = getSaisies(params.chantier);                              break;
       case 'getLibellesForChantier':  result = getLibellesForChantier(params.chantier, params.mode);    break;
