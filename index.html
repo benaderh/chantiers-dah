@@ -244,6 +244,16 @@
       color:var(--mut);font-size:15px;font-weight:600;font-family:inherit;
       cursor:pointer;margin-top:8px;transition:all .2s}
     .btn-cancel:active{background:rgba(255,255,255,.05)}
+    .form-actions { display: flex; gap: 8px; margin-top: 12px; align-items: stretch; }
+    .form-actions .btn-s, .form-actions .btn-del, .form-actions .btn-cancel {
+      flex: 1; width: auto; margin-top: 0; padding: 10px 4px; font-size: 12px; min-height: 48px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    }
+    .form-actions .btn-s span { display: block; }
+    
+    .btn-quit { background: rgba(255,107,107,0.15); border: 1px solid rgba(255,107,107,0.3); color: var(--rd); padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .btn-quit:active { background: rgba(255,107,107,0.3); }
+
     /* Hint long-press */
     .row::after,.vcard::after{content:'';}
     .lp-hint{position:absolute;top:6px;right:8px;font-size:9px;color:var(--brd);pointer-events:none;}
@@ -336,7 +346,8 @@
         <circle cx="350" cy="335" r="14" fill="#e94560"/>
       </svg>
     </div>
-    <h1>Saisie Chantier</h1>
+    <h1 style="flex:1">Saisie Chantier</h1>
+    <button class="btn-quit" onclick="window.close()">✕ Quitter</button>
   </header>
 
   <nav id="tnav"><div id="tabs"></div></nav>
@@ -398,9 +409,11 @@
       <label for="fo">Observation</label>
       <input type="text" id="fo" placeholder="Optionnel…">
     </div>
-    <button type="submit" class="btn-s" id="btn"><span>✓ Enregistrer</span><div class="sp"></div></button>
-    <button type="button" class="btn-del" id="btn-del" style="display:none" onclick="doDelete()">🗑 Supprimer</button>
-    <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Annuler</button>
+    <div class="form-actions">
+      <button type="submit" class="btn-s" id="btn"><span>✓ Enregistrer</span><div class="sp"></div></button>
+      <button type="button" class="btn-del" id="btn-del" style="display:none" onclick="doDelete()">🗑 Supprimer</button>
+      <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Annuler</button>
+    </div>
   </form>
 </div>
 
@@ -443,10 +456,12 @@
   <div class="v-charges-hd">Charges à couvrir avec ce versement :</div>
   <div id="v-charges-list"><div class="vc-empty">Chargement…</div></div>
 
-  <button type="button" class="btn-s org" id="btn-v" onclick="submitVersement()">
-    <span>💸 Créer le versement</span><div class="sp"></div>
-  </button>
-  <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Annuler</button>
+  <div class="form-actions">
+    <button type="button" class="btn-s org" id="btn-v" onclick="submitVersement()">
+      <span>💸 Créer le versement</span><div class="sp"></div>
+    </button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Annuler</button>
+  </div>
 </div>
 
 <!-- ═══ BOTTOM SHEET : Modifier Versement ═══ -->
@@ -467,11 +482,13 @@
     <label for="fev-o">Observation</label>
     <input type="text" id="fev-o" placeholder="Optionnel…">
   </div>
-  <button type="button" class="btn-s org" id="btn-ev" onclick="submitEditVersement()">
-    <span>✓ Modifier le versement</span><div class="sp"></div>
-  </button>
-  <button type="button" class="btn-del" onclick="deleteFromEditVers()">&#128465; Supprimer ce versement</button>
-  <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Annuler</button>
+  <div class="form-actions">
+    <button type="button" class="btn-s org" id="btn-ev" onclick="submitEditVersement()">
+      <span>✓ Modifier</span><div class="sp"></div>
+    </button>
+    <button type="button" class="btn-del" onclick="deleteFromEditVers()">&#128465; Supprimer</button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Annuler</button>
+  </div>
 </div>
 
 <!-- TOAST -->
