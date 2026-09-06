@@ -340,10 +340,13 @@
       </svg>
     </div>
     <h2 style="color:var(--wh);margin-bottom:6px;font-size:20px;font-weight:800;">Connexion</h2>
-    <p style="color:var(--mut);font-size:13px;margin-bottom:20px;">Veuillez entrer votre code PIN</p>
+    <p style="color:var(--mut);font-size:13px;margin-bottom:20px;">Veuillez entrer votre Nom et PIN</p>
     
+    <div class="fg" style="text-align:left;margin-bottom:10px;">
+      <input type="text" id="login-nom" placeholder="Nom d'utilisateur" style="text-align:center;font-size:18px;padding:12px;border-radius:12px;width:100%;">
+    </div>
     <div class="fg" style="text-align:left;margin-bottom:16px;">
-      <input type="password" id="login-pin" inputmode="numeric" placeholder="••••" style="text-align:center;font-size:22px;letter-spacing:10px;padding:12px;border-radius:12px;" onkeypress="if(event.key==='Enter') doLogin()">
+      <input type="password" id="login-pin" placeholder="••••" style="text-align:center;font-size:22px;letter-spacing:10px;padding:12px;border-radius:12px;width:100%;" onkeypress="if(event.key==='Enter') doLogin()">
     </div>
     <button class="btn-s" id="btn-login" onclick="doLogin()">
       <span>Valider</span><div class="sp"></div>
@@ -1349,16 +1352,32 @@ function setupKeyboardFix() {
 function init(){
   setupPWA();
   setupKeyboardFix();
-  var savedUser = null;
+  var savedCredentials = null;
   try {
-    savedUser = localStorage.getItem('chantierUser');
+    savedCredentials = localStorage.getItem('chantierCredentials');
   } catch(e) {
     console.warn("localStorage n'est pas disponible :", e);
   }
   
-  if (savedUser) {
-    S.user = JSON.parse(savedUser);
-    startApp();
+  if (savedCredentials) {
+    var creds = JSON.parse(savedCredentials);
+    callAPI('login', { nom: creds.nom, pin: creds.pin })
+      .then(function(res) {
+        if (res.success) {
+          S.user = res.user;
+          startApp();
+        } else {
+          // Identifiants expirés ou modifiés
+          localStorage.removeItem('chantierCredentials');
+          $('ld').classList.add('h');
+          $('login-ov').style.display = 'flex';
+        }
+      })
+      .catch(function(e) {
+        $('ld').classList.add('h');
+        $('login-ov').style.display = 'flex';
+        toast('Erreur de vérification: ' + e.message, 'er');
+      });
   } else {
     $('ld').classList.add('h');
     $('login-ov').style.display = 'flex';
@@ -1366,21 +1385,25 @@ function init(){
 }
 
 function doLogin() {
+  var nom = $('login-nom').value.trim();
   var pin = $('login-pin').value.trim();
+  if(!nom) { toast('Entrez votre Nom', 'er'); return; }
   if(!pin) { toast('Entrez votre PIN', 'er'); return; }
   
   var btn = $('btn-login'); btn.classList.add('ld'); btn.disabled = true;
-  callAPI('login', { pin: pin })
+  callAPI('login', { nom: nom, pin: pin })
     .then(function(res) {
       btn.classList.remove('ld'); btn.disabled = false;
       if (res.success) {
         S.user = res.user;
-        localStorage.setItem('chantierUser', JSON.stringify(S.user));
+        try {
+          localStorage.setItem('chantierCredentials', JSON.stringify({ nom: nom, pin: pin }));
+        } catch(e) {}
         $('login-ov').style.display = 'none';
         $('login-pin').value = '';
         startApp();
       } else {
-        toast(res.error || 'Erreur PIN', 'er');
+        toast(res.error || 'Erreur d\'authentification', 'er');
       }
     })
     .catch(function(e){
@@ -1391,8 +1414,12 @@ function doLogin() {
 
 function doLogout() {
   S.user = null;
-  localStorage.removeItem('chantierUser');
+  try {
+    localStorage.removeItem('chantierCredentials');
+  } catch(e) {}
   $('app').classList.remove('on');
+  $('login-nom').value = '';
+  $('login-pin').value = '';
   $('login-ov').style.display = 'flex';
 }
 
