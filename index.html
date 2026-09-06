@@ -184,7 +184,8 @@
     /* ═══ OVERLAY ═══ */
     #ov{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.65);
       backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
-      opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s}
+      opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s;
+      cursor:pointer}
     #ov.on{opacity:1;visibility:visible}
 
     /* ═══ BOTTOM SHEETS ═══ */
@@ -366,7 +367,7 @@
 </div>
 
 <!-- OVERLAY -->
-<div id="ov" onclick="closeAll()"></div>
+<div id="ov" onclick="closeAll(event)"></div>
 
 <!-- ═══ BOTTOM SHEET : Saisie Charge / Produit ═══ -->
 <div id="sh" class="bsheet">
@@ -399,7 +400,7 @@
     </div>
     <button type="submit" class="btn-s" id="btn"><span>✓ Enregistrer</span><div class="sp"></div></button>
     <button type="button" class="btn-del" id="btn-del" style="display:none" onclick="doDelete()">🗑 Supprimer</button>
-    <button type="button" class="btn-cancel" onclick="closeAll()">✕ Annuler</button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Annuler</button>
   </form>
 </div>
 
@@ -445,7 +446,7 @@
   <button type="button" class="btn-s org" id="btn-v" onclick="submitVersement()">
     <span>💸 Créer le versement</span><div class="sp"></div>
   </button>
-  <button type="button" class="btn-cancel" onclick="closeAll()">✕ Annuler</button>
+  <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Annuler</button>
 </div>
 
 <!-- ═══ BOTTOM SHEET : Modifier Versement ═══ -->
@@ -470,7 +471,7 @@
     <span>✓ Modifier le versement</span><div class="sp"></div>
   </button>
   <button type="button" class="btn-del" onclick="deleteFromEditVers()">&#128465; Supprimer ce versement</button>
-  <button type="button" class="btn-cancel" onclick="closeAll()">✕ Annuler</button>
+  <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Annuler</button>
 </div>
 
 <!-- TOAST -->
@@ -1079,11 +1080,13 @@ function editRow(rowNum){
   $('ov').classList.add('on'); $('sh').classList.add('on');
 }
 
-function closeAll(){
+function closeAll(e){
+  if(e && e.preventDefault) e.preventDefault();
   $('ov').classList.remove('on');
   $('sh').classList.remove('on');
   $('sh-v').classList.remove('on');
   $('sh-edit-v').classList.remove('on');
+  if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
 }
 
 function submitForm(e){
@@ -1157,8 +1160,8 @@ function setupPWA(){
   var lastTap=0;
   document.addEventListener('touchend',function(e){
     var t=e.target;
-    // Ne pas bloquer double-tap sur les champs de saisie
-    if(t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA') return;
+    // Ne pas bloquer double-tap sur les champs de saisie et les boutons
+    if(t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA'||t.tagName==='BUTTON'||t.closest('button')) return;
     var now=Date.now();
     if(now-lastTap<300&&e.touches.length===0) e.preventDefault();
     lastTap=now;
