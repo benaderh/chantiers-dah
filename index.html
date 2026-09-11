@@ -804,9 +804,11 @@ function toggleVDetail(id){
 /* ═══════════════════════════════════════
    LONG PRESS / DOUBLE CLICK HELPER
 ═══════════════════════════════════════ */
-/* Attache long-press (mobile) + dblclick (desktop) sur un élément */
+/* Attache long-press (mobile) + long-click/dblclick (desktop) sur un élément */
 function attachLongPress(el, callback) {
   var timer = null, moved = false;
+  
+  // -- Mobile (touch) --
   el.addEventListener('touchstart', function() {
     moved = false;
     timer = setTimeout(function() { if (!moved) callback(); }, 500);
@@ -817,7 +819,25 @@ function attachLongPress(el, callback) {
   }, { passive: true });
   el.addEventListener('touchend',   function() { clearTimeout(timer); }, { passive: true });
   el.addEventListener('touchcancel',function() { clearTimeout(timer); }, { passive: true });
-  // Long-press uniquement sur mobile — pas de dblclick
+  
+  // -- PC (souris) --
+  el.addEventListener('mousedown', function(e) {
+    if (e.button !== 0) return; // clic gauche uniquement
+    moved = false;
+    timer = setTimeout(function() { if (!moved) callback(); }, 500);
+  });
+  el.addEventListener('mousemove', function() {
+    moved = true;
+    clearTimeout(timer);
+  });
+  el.addEventListener('mouseup', function() { clearTimeout(timer); });
+  el.addEventListener('mouseleave', function() { clearTimeout(timer); });
+  
+  // Double clic en bonus pour le PC
+  el.addEventListener('dblclick', function(e) {
+    e.preventDefault();
+    callback();
+  });
 }
 
 function attachHistoryEvents() {
