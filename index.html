@@ -12,6 +12,7 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/chantiers-dah/icon-192.png">
   <link rel="manifest" href="/chantiers-dah/manifest.json">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     html,body{height:100%;width:100%;overflow-x:hidden;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
@@ -533,17 +534,183 @@ var S = {
   versements:[], chargesPourVers:[], editVers:null
 };
 var _tt = null;
-var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxGzdecUXhdVi6LbcL92UZ1vQCP-nxN9IMpfSAr-SQjhLS1qhB78CYv77Yvbf4pJhM/exec";
+var SCRIPT_URL = "";
 
 /* ═══════════════════════════════════════
-   API
+   API (Supabase)
 ═══════════════════════════════════════ */
+var supabaseUrl = 'https://xwjtkixmruujdrmzzhlj.supabase.co';
+var supabaseKey = 'sb_publishable_JZYdwDiYQr0ecabcB5Y5jw_P76bY7DB';
+var supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
 function callAPI(action, params) {
-  var url = SCRIPT_URL + '?action=' + encodeURIComponent(action) +
-            '&params=' + encodeURIComponent(JSON.stringify(params || {}));
-  return fetch(url, { redirect: 'follow' })
-    .then(function(r){ if(!r.ok) throw new Error('Réseau '+r.status); return r.json(); })
-    .then(function(d){ if(d.error) throw new Error(d.error); return d.result; });
+  return new Promise(async function(resolve) {
+    try {
+      if (action === 'getStartupData') {
+        const {data: users, error: err1} = await supabase.from('app_users').select().eq('nom', params.nom).eq('pin', params.pin);
+        if(err1) throw err1;
+        if(!users || users.length === 0) return resolve({success: false, error: 'Nom ou PIN incorrect'});
+        
+        const user = users[0];
+        const {data: allC, error: err2} = await supabase.from('chantiers').select('nom');
+        if(err2) throw err2;
+        
+        let allChants = allC.map(c => c.nom);
+        let userChantiers = (user.role === 'admin' || user.chantiers === '*') 
+          ? allChants 
+          : allChants.filter(c => user.chantiers.split(',').map(s=>s.trim()).includes(c));
+        
+        if(userChantiers.length === 0) {
+          return resolve({success: true, user: user, chantiers: [], activeChantier: null, saisies: [], libelles: []});
+        }
+        
+        const active = userChantiers[0];
+        const {data: saisiesData, error: err3} = await supabase.from('saisies').select().eq('chantier', active).order('created_at', {ascending: false});
+        if(err3) throw err3;
+        
+        const {data: listesData, error: err4} = await supabase.from('listes').select().or(`chantier_id.eq.,chantier_id.eq.${active}`);
+        if(err4) throw err4;
+        
+        let saisies = saisiesData.map(s => ({
+          rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, produits: s.produits, reglement: s.reglement, obs: s.obs, refVers: s.ref_vers
+        }));
+        
+        resolve({
+          success: true, user: user, chantiers: userChantiers, activeChantier: active, saisies: saisies, libelles: listesData.map(l => l.libelle)
+        });
+      }
+      else if (action === 'getChantiers') {
+        const {data, error} = await supabase.from('chantiers').select('nom');
+        if(error) throw error;
+        resolve(data.map(c => c.nom));
+      }
+      else if (action === 'getSaisies') {
+        const {data, error} = await supabase.from('saisies').select().eq('chantier', params.chantier).order('created_at', {ascending: false});
+        if(error) throw error;
+        resolve(data.map(s => ({ rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, produits: s.produits, reglement: s.reglement, obs: s.obs, refVers: s.ref_vers })));
+      }
+      else if (action === 'getLibellesForChantier') {
+        const {data, error} = await supabase.from('listes').select().or(`chantier_id.eq.,chantier_id.eq.${params.chantier}`);
+        if(error) throw error;
+        let list = data;
+        if (params.mode) list = list.filter(l => !l.cp || l.cp === params.mode);
+        resolve(list.map(l => l.libelle));
+      }
+      else if (action === 'ajouterSaisie') {
+        const {error} = await supabase.from('saisies').insert({
+          chantier: params.chantier,
+          date: params.saisie.date || new Date().toISOString().split('T')[0],
+          libelle: params.saisie.libelle || '',
+          charges: params.saisie.charges || 0,
+          produits: params.saisie.produits || 0,
+          reglement: params.saisie.reglement || 0,
+          obs: params.saisie.obs || ''
+        });
+        if(error) throw error;
+        resolve({success: true});
+      }
+      else if (action === 'modifierSaisie') {
+        const {error} = await supabase.from('saisies').update({
+          date: params.saisie.date || new Date().toISOString().split('T')[0],
+          libelle: params.saisie.libelle || '',
+          charges: params.saisie.charges || 0,
+          produits: params.saisie.produits || 0,
+          reglement: params.saisie.reglement || 0,
+          obs: params.saisie.obs || ''
+        }).eq('id', params.rowNum);
+        if(error) throw error;
+        resolve({success: true});
+      }
+      else if (action === 'supprimerSaisie') {
+        const {error} = await supabase.from('saisies').delete().eq('id', params.rowNum);
+        if(error) throw error;
+        resolve({success: true});
+      }
+      else if (action === 'getVersements') {
+        const {data: vData, error: e1} = await supabase.from('versements').select().eq('chantier', params.chantier).order('created_at', {ascending: true});
+        if(e1) throw e1;
+        const {data: sData, error: e2} = await supabase.from('saisies').select().eq('chantier', params.chantier);
+        if(e2) throw e2;
+        let result = vData.map(v => {
+          let chargesCouvertes = 0; let details = [];
+          sData.forEach(cr => {
+            if(!cr.ref_vers) return;
+            cr.ref_vers.split(',').map(s=>s.trim()).forEach(ref => {
+              let parts = ref.split(':');
+              if (parts[0] === v.id && cr.charges > 0) {
+                let tranche = parts[1] ? Number(parts[1]) : 0;
+                let mDetail = tranche || cr.charges;
+                chargesCouvertes += mDetail;
+                details.push({ libelle: cr.libelle, charge: cr.charges, tranche: tranche || null });
+              }
+            });
+          });
+          return { id: v.id, date: v.date, chantier: v.chantier, montant: v.montant, obs: v.obs, chargesCouvertes: chargesCouvertes, solde: v.montant - chargesCouvertes, details: details };
+        });
+        resolve(result);
+      }
+      else if (action === 'getChargesPourVersement') {
+        const {data, error} = await supabase.from('saisies').select().eq('chantier', params.chantier);
+        if(error) throw error;
+        resolve(data.filter(s => s.charges > 0).map(s => ({ rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, reglement: s.reglement, refVers: s.ref_vers })));
+      }
+      else if (action === 'ajouterVersement') {
+        const id = 'V-' + Math.floor(Math.random()*10000).toString().padStart(4, '0');
+        const {error: e1} = await supabase.from('versements').insert({
+          id: id, chantier: params.chantier, date: params.versement.date || new Date().toISOString().split('T')[0], montant: params.versement.montant || 0, obs: params.versement.obs || ''
+        });
+        if(e1) throw e1;
+        if(params.versement.lignes && params.versement.lignes.length > 0) {
+          for(let ligne of params.versement.lignes) {
+            const {data: sd} = await supabase.from('saisies').select('ref_vers').eq('id', ligne.rowNum).single();
+            if(sd) {
+              let exist = sd.ref_vers ? sd.ref_vers.trim() : '';
+              let newRef = ligne.montant ? id + ':' + ligne.montant : id;
+              let updated = exist ? exist + ',' + newRef : newRef;
+              await supabase.from('saisies').update({ref_vers: updated}).eq('id', ligne.rowNum);
+            }
+          }
+        }
+        resolve({success: true, id: id});
+      }
+      else if (action === 'supprimerVersement') {
+        await supabase.from('versements').delete().eq('id', params.versementId);
+        const {data: sd} = await supabase.from('saisies').select('id, ref_vers').eq('chantier', params.chantier).ilike('ref_vers', `%${params.versementId}%`);
+        if(sd) {
+          for(let s of sd) {
+            let newRef = s.ref_vers.split(',').filter(x => !x.trim().startsWith(params.versementId)).join(',');
+            await supabase.from('saisies').update({ref_vers: newRef}).eq('id', s.id);
+          }
+        }
+        resolve({success: true});
+      }
+      else if (action === 'modifierVersement') {
+        await supabase.from('versements').update({ date: params.data.date, montant: params.data.montant, obs: params.data.obs }).eq('id', params.versementId);
+        const {data: sd} = await supabase.from('saisies').select('id, ref_vers').eq('chantier', params.chantier).ilike('ref_vers', `%${params.versementId}%`);
+        if(sd) {
+          for(let s of sd) {
+            let newRef = s.ref_vers.split(',').filter(x => !x.trim().startsWith(params.versementId)).join(',');
+            await supabase.from('saisies').update({ref_vers: newRef}).eq('id', s.id);
+          }
+        }
+        if(params.data.lignes && params.data.lignes.length > 0) {
+          for(let ligne of params.data.lignes) {
+            const {data: sd2} = await supabase.from('saisies').select('ref_vers').eq('id', ligne.rowNum).single();
+            if(sd2) {
+              let exist = sd2.ref_vers ? sd2.ref_vers.trim() : '';
+              let newRef = ligne.montant ? params.versementId + ':' + ligne.montant : params.versementId;
+              let updated = exist ? exist + ',' + newRef : newRef;
+              await supabase.from('saisies').update({ref_vers: updated}).eq('id', ligne.rowNum);
+            }
+          }
+        }
+        resolve({success: true});
+      }
+      else { resolve({error: 'Action non supportée dans Supabase'}); }
+    } catch(err) {
+      resolve({error: err.message || String(err)});
+    }
+  });
 }
 
 function $(id){ return document.getElementById(id); }
@@ -866,7 +1033,7 @@ function attachHistoryEvents() {
     if (action === 'versee') {
       fn = function() { toast('Cette charge est liée à un versement. Modification impossible ici.', 'er'); };
     } else {
-      var rowNum = parseInt(action, 10);
+      var rowNum = action;
       fn = function() { editRow(rowNum); };
     }
     attachLongPress(el, fn);
@@ -973,7 +1140,7 @@ function submitVersement(){
   var checks=$('v-charges-list').querySelectorAll('input[type=checkbox]:checked');
   checks.forEach(function(cb){
     var idx     = cb.getAttribute('data-idx');
-    var c       = S.chargesPourVers[parseInt(idx)];
+    var c       = S.chargesPourVers[parseInt(idx, 10)];
     var trf     = $('trf'+idx);
     var tranche = trf ? (parseFloat(trf.value)||0) : 0;
     var reste   = parseFloat(cb.getAttribute('data-reste'))||0;
