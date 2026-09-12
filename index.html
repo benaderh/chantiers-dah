@@ -1399,11 +1399,10 @@ function init(){
   
   if (savedCredentials) {
     var creds = JSON.parse(savedCredentials);
-    callAPI('login', { nom: creds.nom, pin: creds.pin })
+    callAPI('getStartupData', { nom: creds.nom, pin: creds.pin })
       .then(function(res) {
         if (res.success) {
-          S.user = res.user;
-          startApp();
+          handleStartupData(res);
         } else {
           // Identifiants expirés ou modifiés
           localStorage.removeItem('chantierCredentials');
@@ -1430,17 +1429,16 @@ function doLogin() {
     if(!pin) { toast('Entrez votre PIN', 'er'); return; }
     
     var btn = $('btn-login'); btn.classList.add('ld'); btn.disabled = true;
-    callAPI('login', { nom: nom, pin: pin })
+    callAPI('getStartupData', { nom: nom, pin: pin })
       .then(function(res) {
         btn.classList.remove('ld'); btn.disabled = false;
         if (res.success) {
-          S.user = res.user;
           try {
             localStorage.setItem('chantierCredentials', JSON.stringify({ nom: nom, pin: pin }));
           } catch(e) {}
           $('login-ov').style.display = 'none';
           $('login-pin').value = '';
-          startApp();
+          handleStartupData(res);
         } else {
           toast(res.error || 'Erreur d\'authentification', 'er');
           alert("Login refusé : " + (res.error || 'Erreur d\'authentification'));
@@ -1467,31 +1465,28 @@ function doLogout() {
   $('login-ov').style.display = 'flex';
 }
 
-function startApp(){
-  $('ld').classList.remove('h');
+function handleStartupData(res) {
+  S.user = res.user;
   $('app-title').textContent = 'Chantier - ' + S.user.nom;
+  S.chantiers = res.chantiers || [];
   
-  callAPI('getChantiers',{})
-    .then(function(list){
-      if (S.user.role === 'admin' || S.user.chantiers === '*') {
-        S.chantiers = list || [];
-      } else {
-        var userChants = S.user.chantiers.split(',').map(function(c){ return c.trim(); });
-        S.chantiers = (list || []).filter(function(c) { return userChants.indexOf(c) !== -1; });
-      }
-
-      if(!S.chantiers.length){
-        $('ld').classList.add('h'); $('app').classList.add('on');
-        toast('Aucun chantier autorisé','er'); return;
-      }
-      S.active=S.chantiers[0];
-      renderTabs(); updateModeUI(); loadData(S.active);
-      $('ld').classList.add('h'); $('app').classList.add('on');
-    })
-    .catch(function(e){
-      $('ld').classList.add('h'); $('app').classList.add('on');
-      toast('Erreur connexion: '+e.message,'er');
-    });
+  if(!S.chantiers.length){
+    $('ld').classList.add('h'); $('app').classList.add('on');
+    toast('Aucun chantier autorisé','er'); return;
+  }
+  
+  S.active = res.activeChantier;
+  S.saisies = res.saisies || [];
+  S.libelles = res.libelles || [];
+  S.versements = [];
+  
+  renderTabs();
+  updateModeUI();
+  renderHistory();
+  renderLibelles();
+  
+  $('ld').classList.add('h');
+  $('app').classList.add('on');
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
 else init();

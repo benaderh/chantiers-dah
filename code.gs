@@ -702,6 +702,32 @@ function handleAPI_(action, paramsStr) {
 
     switch (action) {
       case 'login':                   result = apiLogin(params.nom, params.pin);                                     break;
+      case 'getStartupData':
+        const loginRes = apiLogin(params.nom, params.pin);
+        if (!loginRes.success) { result = loginRes; break; }
+        const user = loginRes.user;
+        const allChantiers = getChantiers();
+        let userChantiers = [];
+        if (user.role === 'admin' || user.chantiers === '*') {
+          userChantiers = allChantiers;
+        } else {
+          const allowed = user.chantiers.split(',').map(c => c.trim());
+          userChantiers = allChantiers.filter(c => allowed.indexOf(c) !== -1);
+        }
+        if (userChantiers.length === 0) {
+          result = { success: true, user: user, chantiers: [], activeChantier: null, saisies: [], libelles: [] };
+          break;
+        }
+        const active = userChantiers[0];
+        result = {
+          success: true,
+          user: user,
+          chantiers: userChantiers,
+          activeChantier: active,
+          saisies: getSaisies(active),
+          libelles: getLibellesForChantier(active, '')
+        };
+        break;
       case 'getChantiers':            result = getChantiers();                                           break;
       case 'getSaisies':              result = getSaisies(params.chantier);                              break;
       case 'getLibellesForChantier':  result = getLibellesForChantier(params.chantier, params.mode);    break;
