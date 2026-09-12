@@ -806,32 +806,50 @@ function toggleVDetail(id){
 ═══════════════════════════════════════ */
 /* Attache long-press (mobile) + long-click/dblclick (desktop) sur un élément */
 function attachLongPress(el, callback) {
-  var timer = null, moved = false;
+  var timer = null, moved = false, isTouch = false;
+  var startX = 0, startY = 0;
   
   // -- Mobile (touch) --
-  el.addEventListener('touchstart', function() {
+  el.addEventListener('touchstart', function(e) {
+    isTouch = true;
     moved = false;
+    if (e.touches.length > 0) {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    }
     timer = setTimeout(function() { if (!moved) callback(); }, 500);
   }, { passive: true });
-  el.addEventListener('touchmove', function() {
-    moved = true;
-    clearTimeout(timer);
+  el.addEventListener('touchmove', function(e) {
+    if (!isTouch || e.touches.length === 0) return;
+    var dx = Math.abs(e.touches[0].clientX - startX);
+    var dy = Math.abs(e.touches[0].clientY - startY);
+    if (dx > 10 || dy > 10) {
+      moved = true;
+      clearTimeout(timer);
+    }
   }, { passive: true });
-  el.addEventListener('touchend',   function() { clearTimeout(timer); }, { passive: true });
-  el.addEventListener('touchcancel',function() { clearTimeout(timer); }, { passive: true });
+  el.addEventListener('touchend',   function() { clearTimeout(timer); setTimeout(function(){ isTouch = false; }, 500); }, { passive: true });
+  el.addEventListener('touchcancel',function() { clearTimeout(timer); setTimeout(function(){ isTouch = false; }, 500); }, { passive: true });
   
   // -- PC (souris) --
   el.addEventListener('mousedown', function(e) {
-    if (e.button !== 0) return; // clic gauche uniquement
+    if (isTouch || e.button !== 0) return; // clic gauche uniquement
     moved = false;
+    startX = e.clientX;
+    startY = e.clientY;
     timer = setTimeout(function() { if (!moved) callback(); }, 500);
   });
-  el.addEventListener('mousemove', function() {
-    moved = true;
-    clearTimeout(timer);
+  el.addEventListener('mousemove', function(e) {
+    if (isTouch) return;
+    var dx = Math.abs(e.clientX - startX);
+    var dy = Math.abs(e.clientY - startY);
+    if (dx > 10 || dy > 10) {
+      moved = true;
+      clearTimeout(timer);
+    }
   });
-  el.addEventListener('mouseup', function() { clearTimeout(timer); });
-  el.addEventListener('mouseleave', function() { clearTimeout(timer); });
+  el.addEventListener('mouseup', function() { if (!isTouch) clearTimeout(timer); });
+  el.addEventListener('mouseleave', function() { if (!isTouch) clearTimeout(timer); });
   
   // Double clic en bonus pour le PC
   el.addEventListener('dblclick', function(e) {
