@@ -13,6 +13,7 @@
   <link rel="manifest" href="/chantiers-dah/manifest.json">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     html,body{height:100%;width:100%;overflow-x:hidden;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
@@ -373,6 +374,11 @@
       </svg>
     </div>
     <h1 style="flex:1" id="app-title">Saisie Chantier</h1>
+    <input type="file" id="xlsFile" accept=".xlsx,.xls" style="display:none" onchange="if(this.files[0]) importExcel(this.files[0]); this.value='';">
+    <button class="btn-quit" id="btnUsers" style="display:none;margin-right:6px" onclick="openUsersPanel()" title="Gérer les utilisateurs">👤</button>
+    <button class="btn-quit" id="btnListes" style="display:none;margin-right:6px" onclick="openListesPanel()" title="Gérer les libellés">📋</button>
+    <button class="btn-quit" id="btnImportXls" style="display:none;margin-right:6px" onclick="$('xlsFile').click()" title="Importer depuis Excel">⬆️</button>
+    <button class="btn-quit" id="btnExportXls" style="display:none;margin-right:6px" onclick="exportExcel()" title="Exporter toutes les données en Excel">⬇️ Excel</button>
     <button class="btn-quit" onclick="doLogout()">Déconnexion</button>
   </header>
 
@@ -520,6 +526,91 @@
   </div>
 </div>
 
+<!-- ═══ BOTTOM SHEET : Liste Utilisateurs (admin) ═══ -->
+<div id="sh-users" class="bsheet">
+  <div class="hdl"></div>
+  <h2>👤 Utilisateurs</h2>
+  <div id="users-list" style="margin-bottom:14px"></div>
+  <div class="form-actions">
+    <button type="button" class="btn-s" onclick="openUserForm(null)"><span>＋ Nouvel utilisateur</span></button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Fermer</button>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM SHEET : Formulaire Utilisateur (admin) ═══ -->
+<div id="sh-user-form" class="bsheet">
+  <div class="hdl"></div>
+  <h2 id="uf-title">Nouvel utilisateur</h2>
+  <div class="fg">
+    <label for="uf-nom">Nom</label>
+    <input type="text" id="uf-nom" placeholder="Nom d'utilisateur">
+  </div>
+  <div class="fg">
+    <label for="uf-pin">PIN provisoire <span id="uf-pin-hint" style="text-transform:none;letter-spacing:0"></span></label>
+    <input type="text" id="uf-pin" inputmode="numeric" placeholder="ex: 0000">
+  </div>
+  <div class="fg">
+    <label for="uf-role">Rôle</label>
+    <select id="uf-role" onchange="onUfRoleChange()">
+      <option value="user">Utilisateur</option>
+      <option value="admin">Admin (tous les chantiers + import/export)</option>
+    </select>
+  </div>
+  <div class="fg" id="uf-tous-wrap">
+    <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--txt);cursor:pointer">
+      <input type="checkbox" id="uf-tous" style="width:20px;height:20px;accent-color:var(--acc)" onchange="onUfTousChange()">
+      Tous les chantiers (comme admin, sans les droits admin)
+    </label>
+  </div>
+  <div class="fg" id="uf-chantiers-wrap">
+    <label>Chantiers autorisés</label>
+    <div id="uf-chantiers-list" style="background:var(--card2);border-radius:12px;padding:4px 12px;border:1px solid var(--brd)"></div>
+  </div>
+  <div class="form-actions">
+    <button type="button" class="btn-s" id="btn-uf" onclick="saveUser()"><span>✓ Enregistrer</span><div class="sp"></div></button>
+    <button type="button" class="btn-del" id="btn-uf-del" style="display:none" onclick="deleteUserConfirm()">🗑 Supprimer</button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event); openUsersPanel()">✕ Annuler</button>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM SHEET : Liste des Libellés (admin) ═══ -->
+<div id="sh-listes" class="bsheet">
+  <div class="hdl"></div>
+  <h2>📋 Libellés</h2>
+  <div id="listes-list" style="margin-bottom:14px"></div>
+  <div class="form-actions">
+    <button type="button" class="btn-s" onclick="openListeForm(null)"><span>＋ Nouveau libellé</span></button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Fermer</button>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM SHEET : Formulaire Libellé (admin) ═══ -->
+<div id="sh-liste-form" class="bsheet">
+  <div class="hdl"></div>
+  <h2 id="lf-title">Nouveau libellé</h2>
+  <div class="fg">
+    <label for="lf-libelle">Libellé</label>
+    <input type="text" id="lf-libelle" placeholder="ex: Ciment, Transport...">
+  </div>
+  <div class="fg">
+    <label for="lf-chantier">Chantier</label>
+    <select id="lf-chantier"><option value="">Tous les chantiers</option></select>
+  </div>
+  <div class="fg">
+    <label for="lf-cp">Type</label>
+    <select id="lf-cp">
+      <option value="">Charge + Produit</option>
+      <option value="C">Charge uniquement</option>
+      <option value="P">Produit uniquement</option>
+    </select>
+  </div>
+  <div class="form-actions">
+    <button type="button" class="btn-s" id="btn-lf" onclick="saveListe()"><span>✓ Enregistrer</span><div class="sp"></div></button>
+    <button type="button" class="btn-del" id="btn-lf-del" style="display:none" onclick="deleteListeConfirm()">🗑 Supprimer</button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event); openListesPanel()">✕ Annuler</button>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast"></div>
 
@@ -528,10 +619,12 @@
    STATE
 ═══════════════════════════════════════ */
 var S = {
-  user: null,
+  user: null, userPin: null,
   chantiers:[], active:null, mode:null,
   saisies:[], libelles:[], editRow:null,
-  versements:[], chargesPourVers:[], editVers:null
+  versements:[], chargesPourVers:[], editVers:null,
+  usersList:[], editUserId:null,
+  listesList:[], editListeId:null
 };
 var _tt = null;
 var SCRIPT_URL = "";
@@ -543,101 +636,93 @@ var supabaseUrl = 'https://xwjtkixmruujdrmzzhlj.supabase.co';
 var supabaseKey = 'sb_publishable_JZYdwDiYQr0ecabcB5Y5jw_P76bY7DB';
 var supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
+/* Toutes les actions passent par des fonctions RPC authentifiées
+   (p_nom / p_pin vérifiés côté serveur à chaque appel). Aucun accès
+   direct aux tables n'est possible avec la clé anon (RLS verrouillé). */
+function auth(){ return { p_nom: S.user ? S.user.nom : null, p_pin: S.userPin }; }
+
 function callAPI(action, params) {
   return new Promise(async function(resolve) {
     try {
       if (action === 'getStartupData') {
-        const {data: users, error: err1} = await supabase.from('app_users').select().eq('nom', params.nom).eq('pin', params.pin);
+        const {data: users, error: err1} = await supabase.rpc('login_user', { p_nom: params.nom, p_pin: params.pin });
         if(err1) throw err1;
         if(!users || users.length === 0) return resolve({success: false, error: 'Nom ou PIN incorrect'});
-        
         const user = users[0];
-        const {data: allC, error: err2} = await supabase.from('chantiers').select('nom');
+        const a = { p_nom: params.nom, p_pin: params.pin };
+
+        const {data: userChantiers, error: err2} = await supabase.rpc('get_my_chantiers', a);
         if(err2) throw err2;
-        
-        let allChants = allC.map(c => c.nom);
-        let userChantiers = (user.role === 'admin' || user.chantiers === '*') 
-          ? allChants 
-          : allChants.filter(c => user.chantiers.split(',').map(s=>s.trim()).includes(c));
-        
-        if(userChantiers.length === 0) {
+
+        if(!userChantiers || userChantiers.length === 0) {
           return resolve({success: true, user: user, chantiers: [], activeChantier: null, saisies: [], libelles: []});
         }
-        
-        const active = userChantiers[0];
-        const {data: saisiesData, error: err3} = await supabase.from('saisies').select().eq('chantier', active).order('created_at', {ascending: false});
+
+        const active = userChantiers[0].id;
+        const {data: saisiesData, error: err3} = await supabase.rpc('get_saisies', {...a, p_chantier_id: active});
         if(err3) throw err3;
-        
-        const {data: listesData, error: err4} = await supabase.from('listes').select().or(`chantier_id.eq.,chantier_id.eq.${active}`);
+        const {data: listesData, error: err4} = await supabase.rpc('get_libelles', {...a, p_chantier_id: active, p_mode: null});
         if(err4) throw err4;
-        
-        let saisies = saisiesData.map(s => ({
+
+        let saisies = (saisiesData||[]).map(s => ({
           rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, produits: s.produits, reglement: s.reglement, obs: s.obs, refVers: s.ref_vers
         }));
-        
+
         resolve({
-          success: true, user: user, chantiers: userChantiers, activeChantier: active, saisies: saisies, libelles: listesData.map(l => l.libelle)
+          success: true, user: user, chantiers: userChantiers, activeChantier: active, saisies: saisies, libelles: (listesData||[]).map(l => l.libelle)
         });
       }
       else if (action === 'getChantiers') {
-        const {data, error} = await supabase.from('chantiers').select('nom');
+        const {data, error} = await supabase.rpc('get_my_chantiers', auth());
         if(error) throw error;
-        resolve(data.map(c => c.nom));
+        resolve(data);
       }
       else if (action === 'getSaisies') {
-        const {data, error} = await supabase.from('saisies').select().eq('chantier', params.chantier).order('created_at', {ascending: false});
+        const {data, error} = await supabase.rpc('get_saisies', {...auth(), p_chantier_id: params.chantier});
         if(error) throw error;
-        resolve(data.map(s => ({ rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, produits: s.produits, reglement: s.reglement, obs: s.obs, refVers: s.ref_vers })));
+        resolve((data||[]).map(s => ({ rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, produits: s.produits, reglement: s.reglement, obs: s.obs, refVers: s.ref_vers })));
       }
       else if (action === 'getLibellesForChantier') {
-        const {data, error} = await supabase.from('listes').select().or(`chantier_id.eq.,chantier_id.eq.${params.chantier}`);
+        const {data, error} = await supabase.rpc('get_libelles', {...auth(), p_chantier_id: params.chantier, p_mode: params.mode || null});
         if(error) throw error;
-        let list = data;
-        if (params.mode) list = list.filter(l => !l.cp || l.cp === params.mode);
-        resolve(list.map(l => l.libelle));
+        resolve((data||[]).map(l => l.libelle));
       }
       else if (action === 'ajouterSaisie') {
-        const {error} = await supabase.from('saisies').insert({
-          chantier: params.chantier,
-          date: params.saisie.date || new Date().toISOString().split('T')[0],
-          libelle: params.saisie.libelle || '',
-          charges: params.saisie.charges || 0,
-          produits: params.saisie.produits || 0,
-          reglement: params.saisie.reglement || 0,
-          obs: params.saisie.obs || ''
+        const {error} = await supabase.rpc('add_saisie', {
+          ...auth(), p_chantier_id: params.chantier,
+          p_date: params.saisie.date || new Date().toISOString().split('T')[0],
+          p_libelle: params.saisie.libelle || '', p_charges: params.saisie.charges || 0,
+          p_produits: params.saisie.produits || 0, p_reglement: params.saisie.reglement || 0, p_obs: params.saisie.obs || ''
         });
         if(error) throw error;
         resolve({success: true});
       }
       else if (action === 'modifierSaisie') {
-        const {error} = await supabase.from('saisies').update({
-          date: params.saisie.date || new Date().toISOString().split('T')[0],
-          libelle: params.saisie.libelle || '',
-          charges: params.saisie.charges || 0,
-          produits: params.saisie.produits || 0,
-          reglement: params.saisie.reglement || 0,
-          obs: params.saisie.obs || ''
-        }).eq('id', params.rowNum);
+        const {error} = await supabase.rpc('update_saisie', {
+          ...auth(), p_id: params.rowNum,
+          p_date: params.saisie.date || new Date().toISOString().split('T')[0],
+          p_libelle: params.saisie.libelle || '', p_charges: params.saisie.charges || 0,
+          p_produits: params.saisie.produits || 0, p_reglement: params.saisie.reglement || 0, p_obs: params.saisie.obs || ''
+        });
         if(error) throw error;
         resolve({success: true});
       }
       else if (action === 'supprimerSaisie') {
-        const {error} = await supabase.from('saisies').delete().eq('id', params.rowNum);
+        const {error} = await supabase.rpc('delete_saisie', {...auth(), p_id: params.rowNum});
         if(error) throw error;
         resolve({success: true});
       }
       else if (action === 'getVersements') {
-        const {data: vData, error: e1} = await supabase.from('versements').select().eq('chantier', params.chantier).order('created_at', {ascending: true});
-        if(e1) throw e1;
-        const {data: sData, error: e2} = await supabase.from('saisies').select().eq('chantier', params.chantier);
-        if(e2) throw e2;
+        const {data, error} = await supabase.rpc('get_versements_data', {...auth(), p_chantier_id: params.chantier});
+        if(error) throw error;
+        const vData = data.versements || [], sData = data.saisies || [];
         let result = vData.map(v => {
           let chargesCouvertes = 0; let details = [];
           sData.forEach(cr => {
             if(!cr.ref_vers) return;
             cr.ref_vers.split(',').map(s=>s.trim()).forEach(ref => {
               let parts = ref.split(':');
-              if (parts[0] === v.id && cr.charges > 0) {
+              if (String(parts[0]) === String(v.id) && cr.charges > 0) {
                 let tranche = parts[1] ? Number(parts[1]) : 0;
                 let mDetail = tranche || cr.charges;
                 chargesCouvertes += mDetail;
@@ -645,72 +730,147 @@ function callAPI(action, params) {
               }
             });
           });
-          return { id: v.id, date: v.date, chantier: v.chantier, montant: v.montant, obs: v.obs, chargesCouvertes: chargesCouvertes, solde: v.montant - chargesCouvertes, details: details };
+          return { id: v.id, date: v.date, chantier: v.chantier_id, montant: v.montant, obs: v.obs, chargesCouvertes: chargesCouvertes, solde: v.montant - chargesCouvertes, details: details };
         });
         resolve(result);
       }
       else if (action === 'getChargesPourVersement') {
-        const {data, error} = await supabase.from('saisies').select().eq('chantier', params.chantier);
+        const {data, error} = await supabase.rpc('get_charges_pour_versement', {...auth(), p_chantier_id: params.chantier});
         if(error) throw error;
-        resolve(data.filter(s => s.charges > 0).map(s => ({ rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, reglement: s.reglement, refVers: s.ref_vers })));
+        resolve((data||[]).map(s => ({ rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, reglement: s.reglement, refVers: s.ref_vers })));
       }
       else if (action === 'ajouterVersement') {
-        const id = 'V-' + Math.floor(Math.random()*10000).toString().padStart(4, '0');
-        const {error: e1} = await supabase.from('versements').insert({
-          id: id, chantier: params.chantier, date: params.versement.date || new Date().toISOString().split('T')[0], montant: params.versement.montant || 0, obs: params.versement.obs || ''
+        const {data: id, error} = await supabase.rpc('add_versement', {
+          ...auth(), p_chantier_id: params.chantier,
+          p_date: params.versement.date || new Date().toISOString().split('T')[0],
+          p_montant: params.versement.montant || 0, p_obs: params.versement.obs || '',
+          p_lignes: params.versement.lignes || []
         });
-        if(e1) throw e1;
-        if(params.versement.lignes && params.versement.lignes.length > 0) {
-          for(let ligne of params.versement.lignes) {
-            const {data: sd} = await supabase.from('saisies').select('ref_vers').eq('id', ligne.rowNum).single();
-            if(sd) {
-              let exist = sd.ref_vers ? sd.ref_vers.trim() : '';
-              let newRef = ligne.montant ? id + ':' + ligne.montant : id;
-              let updated = exist ? exist + ',' + newRef : newRef;
-              await supabase.from('saisies').update({ref_vers: updated}).eq('id', ligne.rowNum);
-            }
-          }
-        }
+        if(error) throw error;
         resolve({success: true, id: id});
       }
       else if (action === 'supprimerVersement') {
-        await supabase.from('versements').delete().eq('id', params.versementId);
-        const {data: sd} = await supabase.from('saisies').select('id, ref_vers').eq('chantier', params.chantier).ilike('ref_vers', `%${params.versementId}%`);
-        if(sd) {
-          for(let s of sd) {
-            let newRef = s.ref_vers.split(',').filter(x => !x.trim().startsWith(params.versementId)).join(',');
-            await supabase.from('saisies').update({ref_vers: newRef}).eq('id', s.id);
-          }
-        }
+        const {error} = await supabase.rpc('delete_versement', {...auth(), p_versement_id: params.versementId});
+        if(error) throw error;
         resolve({success: true});
       }
       else if (action === 'modifierVersement') {
-        await supabase.from('versements').update({ date: params.data.date, montant: params.data.montant, obs: params.data.obs }).eq('id', params.versementId);
-        const {data: sd} = await supabase.from('saisies').select('id, ref_vers').eq('chantier', params.chantier).ilike('ref_vers', `%${params.versementId}%`);
-        if(sd) {
-          for(let s of sd) {
-            let newRef = s.ref_vers.split(',').filter(x => !x.trim().startsWith(params.versementId)).join(',');
-            await supabase.from('saisies').update({ref_vers: newRef}).eq('id', s.id);
-          }
-        }
-        if(params.data.lignes && params.data.lignes.length > 0) {
-          for(let ligne of params.data.lignes) {
-            const {data: sd2} = await supabase.from('saisies').select('ref_vers').eq('id', ligne.rowNum).single();
-            if(sd2) {
-              let exist = sd2.ref_vers ? sd2.ref_vers.trim() : '';
-              let newRef = ligne.montant ? params.versementId + ':' + ligne.montant : params.versementId;
-              let updated = exist ? exist + ',' + newRef : newRef;
-              await supabase.from('saisies').update({ref_vers: updated}).eq('id', ligne.rowNum);
-            }
-          }
-        }
+        const {error} = await supabase.rpc('update_versement', {
+          ...auth(), p_versement_id: params.versementId,
+          p_date: params.data.date, p_montant: params.data.montant, p_obs: params.data.obs,
+          p_lignes: params.data.lignes || []
+        });
+        if(error) throw error;
         resolve({success: true});
       }
-      else { resolve({error: 'Action non supportée dans Supabase'}); }
+      /* ═══ ADMIN : UTILISATEURS ═══ */
+      else if (action === 'getUsers') {
+        const {data: us, error} = await supabase.rpc('get_users_admin', auth());
+        if(error) throw error;
+        resolve((us||[]).map(u => ({
+          id: u.id, nom: u.nom, role: u.role, tousChantiers: u.tous_chantiers,
+          mustChangePin: u.must_change_pin, chantierIds: u.chantier_ids || []
+        })));
+      }
+      else if (action === 'saveUser') {
+        const d = params.user;
+        const {data: id, error} = await supabase.rpc('save_user_admin', {
+          ...auth(), p_user_id: d.id || null, p_u_nom: d.nom, p_u_pin: d.pin || '',
+          p_role: d.role, p_tous_chantiers: d.tousChantiers, p_chantier_ids: d.chantierIds || []
+        });
+        if(error) throw error;
+        resolve({success: true, id: id});
+      }
+      else if (action === 'deleteUser') {
+        const {error} = await supabase.rpc('delete_user_admin', {...auth(), p_user_id: params.userId});
+        if(error) throw error;
+        resolve({success: true});
+      }
+      /* ═══ ADMIN : LISTES DE LIBELLÉS ═══ */
+      else if (action === 'getListesAdmin') {
+        const {data, error} = await supabase.rpc('get_listes_admin', auth());
+        if(error) throw error;
+        resolve((data||[]).map(l => ({ id: l.id, chantierId: l.chantier_id, chantierNom: l.chantier_nom, libelle: l.libelle, cp: l.cp })));
+      }
+      else if (action === 'saveListe') {
+        const d = params.liste;
+        if(d.id) {
+          const {error} = await supabase.rpc('update_liste_admin', {...auth(), p_id: d.id, p_chantier_id: d.chantierId || null, p_libelle: d.libelle, p_cp: d.cp || ''});
+          if(error) throw error;
+          resolve({success: true, id: d.id});
+        } else {
+          const {data: id, error} = await supabase.rpc('add_liste_admin', {...auth(), p_chantier_id: d.chantierId || null, p_libelle: d.libelle, p_cp: d.cp || ''});
+          if(error) throw error;
+          resolve({success: true, id: id});
+        }
+      }
+      else if (action === 'deleteListe') {
+        const {error} = await supabase.rpc('delete_liste_admin', {...auth(), p_id: params.listeId});
+        if(error) throw error;
+        resolve({success: true});
+      }
+      else { resolve({error: 'Action non supportée'}); }
     } catch(err) {
       resolve({error: err.message || String(err)});
     }
   });
+}
+
+/* ═══ IMPORT / EXPORT EXCEL (admin) ═══
+   Tout se fait maintenant via deux fonctions RPC (admin_export_all /
+   admin_import_all) : le purge + remap des id se fait côté SQL,
+   authentifié, en une seule transaction. */
+async function exportExcel(){
+  showBar(true);
+  try {
+    const {data, error} = await supabase.rpc('admin_export_all', auth());
+    if(error) throw error;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.chantiers || []), 'Chantiers');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.listes || []), 'Listes');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.saisies || []), 'Saisies');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.versements || []), 'Versements');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.app_users || []), 'Utilisateurs');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.user_chantiers || []), 'UtilisateursChantiers');
+
+    const fname = 'export_chantiers_' + new Date().toISOString().slice(0,10) + '.xlsx';
+    XLSX.writeFile(wb, fname);
+    toast('✓ Export Excel terminé', 'ok');
+  } catch(e) {
+    toast('Erreur export: ' + e.message, 'er');
+  }
+  showBar(false);
+}
+
+function importExcel(file){
+  if(!confirm('⚠️ Ceci va SUPPRIMER puis REMPLACER TOUTES les données (utilisateurs, permissions, chantiers, listes, saisies, versements) par le contenu de ce fichier Excel.\n\nCette action est irréversible. Continuer ?')) return;
+
+  showBar(true);
+  var reader = new FileReader();
+  reader.onload = async function(e){
+    try {
+      var wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      var payload = {
+        app_users:      wb.Sheets['Utilisateurs']         ? XLSX.utils.sheet_to_json(wb.Sheets['Utilisateurs'])         : [],
+        user_chantiers: wb.Sheets['UtilisateursChantiers'] ? XLSX.utils.sheet_to_json(wb.Sheets['UtilisateursChantiers']) : [],
+        chantiers:      wb.Sheets['Chantiers']  ? XLSX.utils.sheet_to_json(wb.Sheets['Chantiers'])  : [],
+        listes:         wb.Sheets['Listes']     ? XLSX.utils.sheet_to_json(wb.Sheets['Listes'])     : [],
+        saisies:        wb.Sheets['Saisies']    ? XLSX.utils.sheet_to_json(wb.Sheets['Saisies'])    : [],
+        versements:     wb.Sheets['Versements'] ? XLSX.utils.sheet_to_json(wb.Sheets['Versements']) : []
+      };
+
+      const {error} = await supabase.rpc('admin_import_all', {...auth(), p_payload: payload});
+      if(error) throw error;
+
+      toast('✓ Import terminé, données remplacées', 'ok');
+      setTimeout(function(){ location.reload(); }, 1200);
+    } catch(err) {
+      toast('Erreur import: ' + err.message, 'er');
+      showBar(false);
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function $(id){ return document.getElementById(id); }
@@ -755,9 +915,9 @@ function today(){
 ═══════════════════════════════════════ */
 function renderTabs(){
   var h='';
-  S.chantiers.forEach(function(n){
-    var cls = n===S.active?'tab on':'tab';
-    h+='<button class="'+cls+'" onclick="pick(\''+n.replace(/'/g,"\\'")+'\')">'+escH(n)+'</button>';
+  S.chantiers.forEach(function(c){
+    var cls = c.id===S.active?'tab on':'tab';
+    h+='<button class="'+cls+'" onclick="pick('+c.id+')">'+escH(c.nom)+'</button>';
   });
   $('tabs').innerHTML=h;
 }
@@ -936,7 +1096,7 @@ function renderVersements(){
       detHtml='<div class="vd-empty">Aucune charge associée</div>';
     }
 
-    h+='<div class="vcard" data-vid="'+escH(v.id)+'" style="animation-delay:'+(i*.05)+'s">'+
+    h+='<div class="vcard" data-vid="'+escH(String(v.id))+'" style="animation-delay:'+(i*.05)+'s">'+
       '<div class="vcard-hd" onclick="toggleVDetail(\'vd'+i+'\')">'+
         '<span class="vcard-id">'+v.id+'</span>'+
         '<span class="vcard-date">'+fD(v.date)+'</span>'+
@@ -1182,7 +1342,7 @@ function deleteVersement(vid){
 ═══════════════════════════════════════ */
 function editVersement(vid) {
   var v = null;
-  S.versements.forEach(function(x) { if (x.id === vid) v = x; });
+  S.versements.forEach(function(x) { if (String(x.id) === String(vid)) v = x; });
   if (!v) return;
   S.editVers = v;
   $('fev-id').textContent = v.id;
@@ -1221,7 +1381,7 @@ function renderEditVCharges(){
       var refs = c.refVers.split(',').map(function(s){ return s.trim(); });
       refs.forEach(function(r) {
         var parts = r.split(':');
-        if (parts[0] === vid) {
+        if (String(parts[0]) === String(vid)) {
           isLinked = true;
           currentTranche = parts[1] ? parseFloat(parts[1]) : 0;
         }
@@ -1233,7 +1393,7 @@ function renderEditVCharges(){
     if (c.refVers) {
       var refs2 = c.refVers.split(',').map(function(s){ return s.trim(); });
       refs2.forEach(function(r) {
-        if (r.split(':')[0] !== vid && r !== '') alreadyVerseeOther = true;
+        if (r.split(':')[0] !== String(vid) && r !== '') alreadyVerseeOther = true;
       });
     }
 
@@ -1330,19 +1490,19 @@ function renderLibelles(){
 ═══════════════════════════════════════ */
 function showBar(on){ $('lbar').style.display=on?'block':'none'; }
 
-function pick(name){
-  S.active=name; S.mode=null; S.versements=[];
+function pick(id){
+  S.active=id; S.mode=null; S.versements=[];
   renderTabs(); updateModeUI();
-  loadData(name);
+  loadData(id);
 }
 
-function loadData(name){
+function loadData(id){
   showBar(true); var done=0;
   function ck(){ done++; if(done>=2) showBar(false); }
-  callAPI('getSaisies',{chantier:name})
+  callAPI('getSaisies',{chantier:id})
     .then(function(d){ S.saisies=d||[]; updateModeUI(); renderHistory(); ck(); })
     .catch(function(e){ toast('Erreur: '+e.message,'er'); ck(); });
-  callAPI('getLibellesForChantier',{chantier:name, mode:''})
+  callAPI('getLibellesForChantier',{chantier:id, mode:''})
     .then(function(d){ S.libelles=d||[]; renderLibelles(); ck(); })
     .catch(function(){ ck(); });
 }
@@ -1432,6 +1592,10 @@ function closeAll(e){
   $('sh').classList.remove('on');
   $('sh-v').classList.remove('on');
   $('sh-edit-v').classList.remove('on');
+  $('sh-users').classList.remove('on');
+  $('sh-user-form').classList.remove('on');
+  $('sh-listes').classList.remove('on');
+  $('sh-liste-form').classList.remove('on');
   if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
 }
 
@@ -1569,7 +1733,7 @@ function init(){
     callAPI('getStartupData', { nom: creds.nom, pin: creds.pin })
       .then(function(res) {
         if (res.success) {
-          handleStartupData(res);
+          handleStartupData(res, creds.pin);
         } else {
           // Identifiants expirés ou modifiés
           localStorage.removeItem('chantierCredentials');
@@ -1605,7 +1769,7 @@ function doLogin() {
           } catch(e) {}
           $('login-ov').style.display = 'none';
           $('login-pin').value = '';
-          handleStartupData(res);
+          handleStartupData(res, pin);
         } else {
           toast(res.error || 'Erreur d\'authentification', 'er');
           alert("Login refusé : " + (res.error || 'Erreur d\'authentification'));
@@ -1623,6 +1787,7 @@ function doLogin() {
 
 function doLogout() {
   S.user = null;
+  S.userPin = null;
   try {
     localStorage.removeItem('chantierCredentials');
   } catch(e) {}
@@ -1632,9 +1797,21 @@ function doLogout() {
   $('login-ov').style.display = 'flex';
 }
 
-function handleStartupData(res) {
+function handleStartupData(res, pin) {
   S.user = res.user;
+  S.userPin = pin;
   $('app-title').textContent = 'Chantier - ' + S.user.nom;
+  if(S.user.role === 'admin'){
+    $('btnExportXls').style.display = '';
+    $('btnImportXls').style.display = '';
+    $('btnUsers').style.display = '';
+    $('btnListes').style.display = '';
+  } else {
+    $('btnExportXls').style.display = 'none';
+    $('btnImportXls').style.display = 'none';
+    $('btnUsers').style.display = 'none';
+    $('btnListes').style.display = 'none';
+  }
   S.chantiers = res.chantiers || [];
   
   if(!S.chantiers.length){
@@ -1655,6 +1832,185 @@ function handleStartupData(res) {
   $('ld').classList.add('h');
   $('app').classList.add('on');
 }
+
+/* ═══════════════════════════════════════
+   ADMIN : GESTION DES UTILISATEURS
+═══════════════════════════════════════ */
+function openUsersPanel(){
+  $('users-list').innerHTML = '<div class="vc-empty">Chargement…</div>';
+  $('ov').classList.add('on');
+  $('sh-users').classList.add('on');
+  callAPI('getUsers', {})
+    .then(function(list){ S.usersList = list||[]; renderUsersList(); })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+function renderUsersList(){
+  var chById = {};
+  S.chantiers.forEach(function(c){ chById[c.id] = c.nom; });
+  var h = '';
+  (S.usersList||[]).forEach(function(u){
+    var portee;
+    if(u.role === 'admin') portee = 'Admin — tous les chantiers';
+    else if(u.tousChantiers) portee = 'Tous les chantiers';
+    else if(u.chantierIds.length) portee = u.chantierIds.map(function(id){ return chById[id] || ('#'+id); }).join(', ');
+    else portee = '<span style="color:var(--rd)">Aucun chantier assigné</span>';
+    h += '<div class="row" style="cursor:pointer" onclick="openUserForm('+u.id+')">'+
+      '<div class="r1"><span class="lib">'+escH(u.nom)+'</span></div>'+
+      '<div class="robs">'+portee+'</div>'+
+    '</div>';
+  });
+  if(!h) h = '<div class="vc-empty">Aucun utilisateur</div>';
+  $('users-list').innerHTML = h;
+}
+
+function renderUfChantiersList(selectedIds){
+  var h = '';
+  (S.chantiers||[]).forEach(function(c){
+    var checked = (selectedIds||[]).indexOf(c.id) > -1 ? 'checked' : '';
+    h += '<label class="vc-item" style="cursor:pointer">'+
+      '<input type="checkbox" class="uf-chk" value="'+c.id+'" '+checked+'>'+
+      '<div class="vc-label"><div class="vc-lib">'+escH(c.nom)+'</div></div>'+
+    '</label>';
+  });
+  $('uf-chantiers-list').innerHTML = h || '<div class="vc-empty">Aucun chantier</div>';
+}
+
+function onUfRoleChange(){
+  var isAdmin = $('uf-role').value === 'admin';
+  $('uf-tous-wrap').style.display = isAdmin ? 'none' : '';
+  $('uf-chantiers-wrap').style.display = (isAdmin || $('uf-tous').checked) ? 'none' : '';
+}
+
+function onUfTousChange(){
+  $('uf-chantiers-wrap').style.display = $('uf-tous').checked ? 'none' : '';
+}
+
+function openUserForm(userId){
+  closeAll();
+  var u = userId ? (S.usersList||[]).find(function(x){ return x.id === userId; }) : null;
+  S.editUserId = u ? u.id : null;
+  $('uf-title').textContent = u ? ('Modifier — ' + u.nom) : 'Nouvel utilisateur';
+  $('uf-nom').value = u ? u.nom : '';
+  $('uf-pin').value = '';
+  $('uf-pin-hint').textContent = u ? '(laisser vide pour ne pas changer)' : '';
+  $('uf-role').value = u ? u.role : 'user';
+  $('uf-tous').checked = u ? !!u.tousChantiers : false;
+  renderUfChantiersList(u ? u.chantierIds : []);
+  onUfRoleChange();
+  $('btn-uf-del').style.display = u ? '' : 'none';
+  $('ov').classList.add('on');
+  $('sh-user-form').classList.add('on');
+}
+
+function saveUser(){
+  var nom = $('uf-nom').value.trim();
+  if(!nom){ toast('Saisissez un nom','er'); return; }
+  var pin = $('uf-pin').value.trim();
+  if(!S.editUserId && !pin){ toast('Saisissez un PIN provisoire','er'); return; }
+  var role = $('uf-role').value;
+  var tousChantiers = $('uf-tous').checked;
+  var chantierIds = [];
+  document.querySelectorAll('.uf-chk:checked').forEach(function(cb){ chantierIds.push(parseInt(cb.value,10)); });
+
+  var btn = $('btn-uf'); btn.classList.add('ld'); btn.disabled = true;
+  callAPI('saveUser', { user: { id: S.editUserId, nom: nom, pin: pin, role: role, tousChantiers: tousChantiers, chantierIds: chantierIds } })
+    .then(function(r){
+      btn.classList.remove('ld'); btn.disabled = false;
+      if(r.error){ toast('Erreur: '+r.error,'er'); return; }
+      toast('✓ Utilisateur enregistré','ok');
+      closeAll();
+      openUsersPanel();
+    })
+    .catch(function(e){ btn.classList.remove('ld'); btn.disabled = false; toast('Erreur: '+e.message,'er'); });
+}
+
+function deleteUserConfirm(){
+  if(!S.editUserId) return;
+  if(!confirm('Supprimer définitivement cet utilisateur ?')) return;
+  callAPI('deleteUser', { userId: S.editUserId })
+    .then(function(){ toast('Utilisateur supprimé','ok'); closeAll(); openUsersPanel(); })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+/* ═══════════════════════════════════════
+   ADMIN : GESTION DES LIBELLÉS
+═══════════════════════════════════════ */
+function openListesPanel(){
+  $('listes-list').innerHTML = '<div class="vc-empty">Chargement…</div>';
+  $('ov').classList.add('on');
+  $('sh-listes').classList.add('on');
+  callAPI('getListesAdmin', {})
+    .then(function(r){
+      if(r && r.error){ toast('Erreur: '+r.error,'er'); return; }
+      S.listesList = r||[]; renderListesList();
+    })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+function renderListesList(){
+  var h = '';
+  (S.listesList||[]).forEach(function(l){
+    var portee = l.chantierId ? escH(l.chantierNom || ('#'+l.chantierId)) : 'Tous les chantiers';
+    var type = l.cp === 'C' ? 'Charge' : (l.cp === 'P' ? 'Produit' : 'Charge + Produit');
+    h += '<div class="row" style="cursor:pointer" onclick="openListeForm('+l.id+')">'+
+      '<div class="r1"><span class="lib">'+escH(l.libelle)+'</span></div>'+
+      '<div class="robs">'+portee+' — '+type+'</div>'+
+    '</div>';
+  });
+  if(!h) h = '<div class="vc-empty">Aucun libellé</div>';
+  $('listes-list').innerHTML = h;
+}
+
+function openListeForm(listeId){
+  closeAll();
+  var l = listeId ? (S.listesList||[]).find(function(x){ return x.id === listeId; }) : null;
+  S.editListeId = l ? l.id : null;
+  $('lf-title').textContent = l ? 'Modifier — ' + l.libelle : 'Nouveau libellé';
+  $('lf-libelle').value = l ? l.libelle : '';
+  $('lf-cp').value = l ? (l.cp || '') : '';
+
+  var h = '<option value="">Tous les chantiers</option>';
+  (S.chantiers||[]).forEach(function(c){
+    var sel = (l && l.chantierId === c.id) ? 'selected' : '';
+    h += '<option value="'+c.id+'" '+sel+'>'+escH(c.nom)+'</option>';
+  });
+  $('lf-chantier').innerHTML = h;
+
+  $('btn-lf-del').style.display = l ? '' : 'none';
+  $('ov').classList.add('on');
+  $('sh-liste-form').classList.add('on');
+}
+
+function saveListe(){
+  var libelle = $('lf-libelle').value.trim();
+  if(!libelle){ toast('Saisissez un libellé','er'); return; }
+  var chantierId = $('lf-chantier').value ? parseInt($('lf-chantier').value,10) : null;
+  var cp = $('lf-cp').value;
+
+  var btn = $('btn-lf'); btn.classList.add('ld'); btn.disabled = true;
+  callAPI('saveListe', { liste: { id: S.editListeId, libelle: libelle, chantierId: chantierId, cp: cp } })
+    .then(function(r){
+      btn.classList.remove('ld'); btn.disabled = false;
+      if(r.error){ toast('Erreur: '+r.error,'er'); return; }
+      toast('✓ Libellé enregistré','ok');
+      closeAll();
+      openListesPanel();
+    })
+    .catch(function(e){ btn.classList.remove('ld'); btn.disabled = false; toast('Erreur: '+e.message,'er'); });
+}
+
+function deleteListeConfirm(){
+  if(!S.editListeId) return;
+  if(!confirm('Supprimer définitivement ce libellé ?')) return;
+  callAPI('deleteListe', { listeId: S.editListeId })
+    .then(function(r){
+      if(r && r.error){ toast('Erreur: '+r.error,'er'); return; }
+      toast('Libellé supprimé','ok'); closeAll(); openListesPanel();
+    })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
 else init();
 </script>
