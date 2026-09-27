@@ -377,6 +377,10 @@
     <input type="file" id="xlsFile" accept=".xlsx,.xls" style="display:none" onchange="if(this.files[0]) importExcel(this.files[0]); this.value='';">
     <button class="btn-quit" id="btnUsers" style="display:none;margin-right:6px" onclick="openUsersPanel()" title="Gérer les utilisateurs">👤</button>
     <button class="btn-quit" id="btnListes" style="display:none;margin-right:6px" onclick="openListesPanel()" title="Gérer les libellés">📋</button>
+    <button class="btn-quit" id="btnChantiers" style="display:none;margin-right:6px" onclick="openChantiersPanel()" title="Gérer les chantiers">🏗️</button>
+    <button class="btn-quit" id="btnTiers" style="display:none;margin-right:6px" onclick="openTiersPanel()" title="Gérer les tiers">🤝</button>
+    <button class="btn-quit" id="btnPersonnel" style="display:none;margin-right:6px" onclick="openPersonnelPanel()" title="Gérer le personnel">👷</button>
+    <button class="btn-quit" id="btnComptes" style="margin-right:6px" onclick="openComptesPanel()" title="Comptes tiers / personnel">💰</button>
     <button class="btn-quit" id="btnImportXls" style="display:none;margin-right:6px" onclick="$('xlsFile').click()" title="Importer depuis Excel">⬆️</button>
     <button class="btn-quit" id="btnExportXls" style="display:none;margin-right:6px" onclick="exportExcel()" title="Exporter toutes les données en Excel">⬇️ Excel</button>
     <button class="btn-quit" onclick="doLogout()">Déconnexion</button>
@@ -430,6 +434,21 @@
     <div class="fg">
       <label id="lbl-montant">Montant</label>
       <input type="number" id="fm" min="0" step="1" inputmode="numeric" placeholder="0">
+    </div>
+    <!-- Champs Tiers / Employé (affichés seulement en mode Charge) -->
+    <div class="fr2" id="fg-tp" style="display:none">
+      <div class="fg">
+        <label for="ftiers">Tiers (optionnel)</label>
+        <select id="ftiers" onchange="onTiersChange()"><option value="">Aucun</option></select>
+      </div>
+      <div class="fg">
+        <label for="fpersonnel">Employé (optionnel)</label>
+        <select id="fpersonnel" onchange="onPersonnelChange()"><option value="">Aucun</option></select>
+      </div>
+    </div>
+    <div class="fg" id="fg-quantite" style="display:none">
+      <label for="fquantite">Quantité (unités)</label>
+      <input type="number" id="fquantite" min="0" step="1" inputmode="numeric" placeholder="0" oninput="onQuantiteChange()">
     </div>
     <!-- Champ règlement (affiché seulement en mode C ou R) -->
     <div class="fg" id="fg-rgl" style="display:none">
@@ -611,6 +630,132 @@
   </div>
 </div>
 
+<!-- ═══ BOTTOM SHEET : Liste des Chantiers (admin) ═══ -->
+<div id="sh-chantiers" class="bsheet">
+  <div class="hdl"></div>
+  <h2>🏗️ Chantiers</h2>
+  <div id="chantiers-list" style="margin-bottom:14px"></div>
+  <div class="form-actions">
+    <button type="button" class="btn-s" onclick="openChantierForm(null)"><span>＋ Nouveau chantier</span></button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Fermer</button>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM SHEET : Formulaire Chantier (admin) ═══ -->
+<div id="sh-chantier-form" class="bsheet">
+  <div class="hdl"></div>
+  <h2 id="cf-title">Nouveau chantier</h2>
+  <div class="fg">
+    <label for="cf-nom">Nom du chantier</label>
+    <input type="text" id="cf-nom" placeholder="ex: Chantier 4">
+  </div>
+  <div class="form-actions">
+    <button type="button" class="btn-s" id="btn-cf" onclick="saveChantier()"><span>✓ Enregistrer</span><div class="sp"></div></button>
+    <button type="button" class="btn-del" id="btn-cf-del" style="display:none" onclick="deleteChantierConfirm()">🗑 Supprimer</button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event); openChantiersPanel()">✕ Annuler</button>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM SHEET : Liste des Tiers (admin) ═══ -->
+<div id="sh-tiers" class="bsheet">
+  <div class="hdl"></div>
+  <h2>🤝 Tiers</h2>
+  <div id="tiers-list" style="margin-bottom:14px"></div>
+  <div class="form-actions">
+    <button type="button" class="btn-s" onclick="openTiersForm(null)"><span>＋ Nouveau tiers</span></button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Fermer</button>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM SHEET : Formulaire Tiers (admin) ═══ -->
+<div id="sh-tiers-form" class="bsheet">
+  <div class="hdl"></div>
+  <h2 id="tf-title">Nouveau tiers</h2>
+  <div class="fg">
+    <label for="tf-nom">Nom</label>
+    <input type="text" id="tf-nom" placeholder="ex: Fournisseur Ciment SARL">
+  </div>
+  <div class="fg">
+    <label for="tf-type">Type</label>
+    <select id="tf-type">
+      <option value="">Non précisé</option>
+      <option value="fournisseur">Fournisseur</option>
+      <option value="loueur">Loueur d'engins</option>
+      <option value="transporteur">Transporteur</option>
+      <option value="autre">Autre</option>
+    </select>
+  </div>
+  <div class="fg">
+    <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--txt);cursor:pointer">
+      <input type="checkbox" id="tf-actif" checked style="width:20px;height:20px;accent-color:var(--acc)">
+      Actif
+    </label>
+  </div>
+  <div class="form-actions">
+    <button type="button" class="btn-s" id="btn-tf" onclick="saveTiers()"><span>✓ Enregistrer</span><div class="sp"></div></button>
+    <button type="button" class="btn-del" id="btn-tf-del" style="display:none" onclick="deleteTiersConfirm()">🗑 Supprimer</button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event); openTiersPanel()">✕ Annuler</button>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM SHEET : Liste du Personnel (admin) ═══ -->
+<div id="sh-personnel" class="bsheet">
+  <div class="hdl"></div>
+  <h2>👷 Personnel</h2>
+  <div id="personnel-list" style="margin-bottom:14px"></div>
+  <div class="form-actions">
+    <button type="button" class="btn-s" onclick="openPersonnelForm(null)"><span>＋ Nouvel employé</span></button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Fermer</button>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM SHEET : Formulaire Personnel (admin) ═══ -->
+<div id="sh-personnel-form" class="bsheet">
+  <div class="hdl"></div>
+  <h2 id="pf-title">Nouvel employé</h2>
+  <div class="fg">
+    <label for="pf-nom">Nom</label>
+    <input type="text" id="pf-nom" placeholder="ex: Ahmed B.">
+  </div>
+  <div class="fr2">
+    <div class="fg">
+      <label for="pf-mode">Mode de paie</label>
+      <select id="pf-mode">
+        <option value="journalier">Journalier</option>
+        <option value="unite">À l'unité</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label for="pf-taux">Taux par défaut</label>
+      <input type="number" id="pf-taux" min="0" step="1" inputmode="numeric" placeholder="0">
+    </div>
+  </div>
+  <div class="fg">
+    <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--txt);cursor:pointer">
+      <input type="checkbox" id="pf-actif" checked style="width:20px;height:20px;accent-color:var(--acc)">
+      Actif
+    </label>
+  </div>
+  <div class="form-actions">
+    <button type="button" class="btn-s" id="btn-pf" onclick="savePersonnel()"><span>✓ Enregistrer</span><div class="sp"></div></button>
+    <button type="button" class="btn-del" id="btn-pf-del" style="display:none" onclick="deletePersonnelConfirm()">🗑 Supprimer</button>
+    <button type="button" class="btn-cancel" onclick="closeAll(event); openPersonnelPanel()">✕ Annuler</button>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM SHEET : Comptes (soldes tiers / personnel) ═══ -->
+<div id="sh-comptes" class="bsheet">
+  <div class="hdl"></div>
+  <h2>💰 Comptes du chantier</h2>
+  <div class="stit" style="padding:0 0 6px">Tiers</div>
+  <div id="comptes-tiers-list" style="margin-bottom:14px"></div>
+  <div class="stit" style="padding:0 0 6px">Personnel</div>
+  <div id="comptes-personnel-list" style="margin-bottom:14px"></div>
+  <div class="form-actions">
+    <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Fermer</button>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast"></div>
 
@@ -624,8 +769,13 @@ var S = {
   saisies:[], libelles:[], editRow:null,
   versements:[], chargesPourVers:[], editVers:null,
   usersList:[], editUserId:null,
-  listesList:[], editListeId:null
+  listesList:[], editListeId:null,
+  chantiersList:[], editChantierId:null,
+  tiersList:[], editTiersId:null,
+  personnelList:[], editPersonnelId:null,
+  comptesTiers:[], comptesPersonnel:[]
 };
+var _skipPrefill = false;
 var _tt = null;
 var SCRIPT_URL = "";
 
@@ -665,7 +815,8 @@ function callAPI(action, params) {
         if(err4) throw err4;
 
         let saisies = (saisiesData||[]).map(s => ({
-          rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, produits: s.produits, reglement: s.reglement, obs: s.obs, refVers: s.ref_vers
+          rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, produits: s.produits, reglement: s.reglement, obs: s.obs, refVers: s.ref_vers,
+          tiersId: s.tiers_id, personnelId: s.personnel_id, quantite: s.quantite
         }));
 
         resolve({
@@ -680,7 +831,7 @@ function callAPI(action, params) {
       else if (action === 'getSaisies') {
         const {data, error} = await supabase.rpc('get_saisies', {...auth(), p_chantier_id: params.chantier});
         if(error) throw error;
-        resolve((data||[]).map(s => ({ rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, produits: s.produits, reglement: s.reglement, obs: s.obs, refVers: s.ref_vers })));
+        resolve((data||[]).map(s => ({ rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, produits: s.produits, reglement: s.reglement, obs: s.obs, refVers: s.ref_vers, tiersId: s.tiers_id, personnelId: s.personnel_id, quantite: s.quantite })));
       }
       else if (action === 'getLibellesForChantier') {
         const {data, error} = await supabase.rpc('get_libelles', {...auth(), p_chantier_id: params.chantier, p_mode: params.mode || null});
@@ -692,7 +843,9 @@ function callAPI(action, params) {
           ...auth(), p_chantier_id: params.chantier,
           p_date: params.saisie.date || new Date().toISOString().split('T')[0],
           p_libelle: params.saisie.libelle || '', p_charges: params.saisie.charges || 0,
-          p_produits: params.saisie.produits || 0, p_reglement: params.saisie.reglement || 0, p_obs: params.saisie.obs || ''
+          p_produits: params.saisie.produits || 0, p_reglement: params.saisie.reglement || 0, p_obs: params.saisie.obs || '',
+          p_tiers_id: params.saisie.tiersId || null, p_personnel_id: params.saisie.personnelId || null,
+          p_quantite: params.saisie.quantite || null
         });
         if(error) throw error;
         resolve({success: true});
@@ -702,7 +855,9 @@ function callAPI(action, params) {
           ...auth(), p_id: params.rowNum,
           p_date: params.saisie.date || new Date().toISOString().split('T')[0],
           p_libelle: params.saisie.libelle || '', p_charges: params.saisie.charges || 0,
-          p_produits: params.saisie.produits || 0, p_reglement: params.saisie.reglement || 0, p_obs: params.saisie.obs || ''
+          p_produits: params.saisie.produits || 0, p_reglement: params.saisie.reglement || 0, p_obs: params.saisie.obs || '',
+          p_tiers_id: params.saisie.tiersId || null, p_personnel_id: params.saisie.personnelId || null,
+          p_quantite: params.saisie.quantite || null
         });
         if(error) throw error;
         resolve({success: true});
@@ -763,6 +918,66 @@ function callAPI(action, params) {
         if(error) throw error;
         resolve({success: true});
       }
+      /* ═══ TIERS ═══ */
+      else if (action === 'getTiers') {
+        const {data, error} = await supabase.rpc('get_tiers', auth());
+        if(error) throw error;
+        resolve((data||[]).map(t => ({ id: t.id, nom: t.nom, type: t.type, actif: t.actif })));
+      }
+      else if (action === 'getTiersAdmin') {
+        const {data, error} = await supabase.rpc('get_tiers_admin', auth());
+        if(error) throw error;
+        resolve((data||[]).map(t => ({ id: t.id, nom: t.nom, type: t.type, actif: t.actif })));
+      }
+      else if (action === 'saveTiers') {
+        const d = params.tiers;
+        const {data: id, error} = await supabase.rpc('save_tiers_admin', {
+          ...auth(), p_id: d.id || null, p_tiers_nom: d.nom, p_type: d.type || null, p_actif: d.actif !== false
+        });
+        if(error) throw error;
+        resolve({success: true, id: id});
+      }
+      else if (action === 'deleteTiers') {
+        const {error} = await supabase.rpc('delete_tiers_admin', {...auth(), p_id: params.tiersId});
+        if(error) throw error;
+        resolve({success: true});
+      }
+      /* ═══ PERSONNEL ═══ */
+      else if (action === 'getPersonnel') {
+        const {data, error} = await supabase.rpc('get_personnel', auth());
+        if(error) throw error;
+        resolve((data||[]).map(p => ({ id: p.id, nom: p.nom, modePaie: p.mode_paie, tauxDefaut: p.taux_defaut, actif: p.actif })));
+      }
+      else if (action === 'getPersonnelAdmin') {
+        const {data, error} = await supabase.rpc('get_personnel_admin', auth());
+        if(error) throw error;
+        resolve((data||[]).map(p => ({ id: p.id, nom: p.nom, modePaie: p.mode_paie, tauxDefaut: p.taux_defaut, actif: p.actif })));
+      }
+      else if (action === 'savePersonnel') {
+        const d = params.personnel;
+        const {data: id, error} = await supabase.rpc('save_personnel_admin', {
+          ...auth(), p_id: d.id || null, p_personnel_nom: d.nom, p_mode_paie: d.modePaie || 'journalier',
+          p_taux_defaut: d.tauxDefaut || 0, p_actif: d.actif !== false
+        });
+        if(error) throw error;
+        resolve({success: true, id: id});
+      }
+      else if (action === 'deletePersonnel') {
+        const {error} = await supabase.rpc('delete_personnel_admin', {...auth(), p_id: params.personnelId});
+        if(error) throw error;
+        resolve({success: true});
+      }
+      /* ═══ COMPTES (soldes) ═══ */
+      else if (action === 'getSoldesTiers') {
+        const {data, error} = await supabase.rpc('get_soldes_tiers', {...auth(), p_chantier_id: params.chantier});
+        if(error) throw error;
+        resolve((data||[]).map(r => ({ id: r.tiers_id, nom: r.nom, totalCharges: r.total_charges, totalRegle: r.total_regle, solde: r.solde })));
+      }
+      else if (action === 'getSoldesPersonnel') {
+        const {data, error} = await supabase.rpc('get_soldes_personnel', {...auth(), p_chantier_id: params.chantier});
+        if(error) throw error;
+        resolve((data||[]).map(r => ({ id: r.personnel_id, nom: r.nom, totalCharges: r.total_charges, totalRegle: r.total_regle, solde: r.solde })));
+      }
       /* ═══ ADMIN : UTILISATEURS ═══ */
       else if (action === 'getUsers') {
         const {data: us, error} = await supabase.rpc('get_users_admin', auth());
@@ -806,6 +1021,29 @@ function callAPI(action, params) {
       }
       else if (action === 'deleteListe') {
         const {error} = await supabase.rpc('delete_liste_admin', {...auth(), p_id: params.listeId});
+        if(error) throw error;
+        resolve({success: true});
+      }
+      /* ═══ ADMIN : CHANTIERS ═══ */
+      else if (action === 'getChantiersAdmin') {
+        const {data, error} = await supabase.rpc('get_chantiers_admin', auth());
+        if(error) throw error;
+        resolve(data||[]);
+      }
+      else if (action === 'saveChantier') {
+        const d = params.chantier;
+        if(d.id) {
+          const {error} = await supabase.rpc('update_chantier_admin', {...auth(), p_id: d.id, p_chantier_nom: d.nom});
+          if(error) throw error;
+          resolve({success: true, id: d.id});
+        } else {
+          const {data: id, error} = await supabase.rpc('add_chantier_admin', {...auth(), p_chantier_nom: d.nom});
+          if(error) throw error;
+          resolve({success: true, id: id});
+        }
+      }
+      else if (action === 'deleteChantier') {
+        const {error} = await supabase.rpc('delete_chantier_admin', {...auth(), p_id: params.chantierId});
         if(error) throw error;
         resolve({success: true});
       }
@@ -916,7 +1154,7 @@ function today(){
 function renderTabs(){
   var h='';
   S.chantiers.forEach(function(c){
-    var cls = c.id===S.active?'tab on':'tab';
+    var cls = String(c.id)===String(S.active)?'tab on':'tab';
     h+='<button class="'+cls+'" onclick="pick('+c.id+')">'+escH(c.nom)+'</button>';
   });
   $('tabs').innerHTML=h;
@@ -1505,6 +1743,18 @@ function loadData(id){
   callAPI('getLibellesForChantier',{chantier:id, mode:''})
     .then(function(d){ S.libelles=d||[]; renderLibelles(); ck(); })
     .catch(function(){ ck(); });
+  callAPI('getTiers',{}).then(function(d){ S.tiersList=d||[]; }).catch(function(){});
+  callAPI('getPersonnel',{}).then(function(d){ S.personnelList=d||[]; }).catch(function(){});
+}
+
+function fillTPSelect(sel, list, currentId){
+  var h = '<option value="">Aucun</option>';
+  list.forEach(function(x){
+    var sel2 = String(x.id)===String(currentId) ? 'selected' : '';
+    var label = escH(x.nom) + (x.actif===false ? ' (inactif)' : '');
+    h += '<option value="'+x.id+'" '+sel2+'>'+label+'</option>';
+  });
+  $(sel).innerHTML = h;
 }
 
 /* ═══════════════════════════════════════
@@ -1523,7 +1773,10 @@ function openForm(){
   if(m!=='C'&&m!=='P'&&m!=='R'){ toast('Sélectionne un mode','er'); return; }
   S.editRow=null;
   setupFormForMode(m);
+  fillTPSelect('ftiers', S.tiersList, '');
+  fillTPSelect('fpersonnel', S.personnelList, '');
   $('fd').value=today(); $('fl').value=''; $('fm').value=''; $('frgl').value=''; $('fo').value='';
+  $('fquantite').value=''; $('fg-quantite').style.display='none';
   $('btn-del').style.display='none';
   $('btn').querySelector('span').textContent='✓ Enregistrer';
   updateRglHint();
@@ -1540,6 +1793,42 @@ function setupFormForMode(m){
   $('lbl-rgl').textContent  = isC?'Règlement direct (montant payé)':'Règlement';
   // Montant : toujours visible
   $('fg-rgl').style.display = isC ? 'block' : 'none';
+  // Tiers / Employé : uniquement en mode Charge
+  $('fg-tp').style.display = isC ? 'grid' : 'none';
+  if(!isC) $('fg-quantite').style.display = 'none';
+}
+
+/* Tiers / Employé liés à une charge */
+function onTiersChange(){
+  // Un seul des deux (tiers ou employé) a du sens à la fois pour une charge donnée
+  if($('ftiers').value) $('fpersonnel').value = '';
+  $('fg-quantite').style.display='none';
+}
+
+function onPersonnelChange(){
+  var pid = $('fpersonnel').value;
+  if(pid) $('ftiers').value = '';
+  if(!pid){ $('fg-quantite').style.display='none'; return; }
+  var p = (S.personnelList||[]).find(function(x){ return String(x.id)===String(pid); });
+  if(!p) return;
+  if(p.modePaie==='unite'){
+    $('fg-quantite').style.display='block';
+    if(!_skipPrefill && !$('fquantite').value) $('fquantite').value = 1;
+    if(!_skipPrefill) onQuantiteChange();
+  } else {
+    $('fg-quantite').style.display='none';
+    if(!_skipPrefill && !$('fm').value) $('fm').value = p.tauxDefaut || '';
+  }
+  if(!_skipPrefill) updateRglHint();
+}
+
+function onQuantiteChange(){
+  var pid = $('fpersonnel').value;
+  var p = (S.personnelList||[]).find(function(x){ return String(x.id)===String(pid); });
+  if(!p || p.modePaie!=='unite') return;
+  var qte = parseFloat($('fquantite').value)||0;
+  $('fm').value = qte * (p.tauxDefaut||0);
+  updateRglHint();
 }
 
 function updateRglHint(){
@@ -1574,6 +1863,12 @@ function editRow(rowNum){
     .catch(function(){});
 
   setupFormForMode(eMode);
+  fillTPSelect('ftiers', S.tiersList, s.tiersId||'');
+  fillTPSelect('fpersonnel', S.personnelList, s.personnelId||'');
+  $('fquantite').value = s.quantite||'';
+  _skipPrefill = true;
+  if(eMode==='C') onPersonnelChange();
+  _skipPrefill = false;
   $('sh-title').textContent='Modifier '+(eMode==='C'?'Charge':(eMode==='P'?'Produit':'Règlement'));
   $('fd').value=s.date||'';
   $('fl').value=s.libelle||'';
@@ -1596,6 +1891,13 @@ function closeAll(e){
   $('sh-user-form').classList.remove('on');
   $('sh-listes').classList.remove('on');
   $('sh-liste-form').classList.remove('on');
+  $('sh-chantiers').classList.remove('on');
+  $('sh-chantier-form').classList.remove('on');
+  $('sh-tiers').classList.remove('on');
+  $('sh-tiers-form').classList.remove('on');
+  $('sh-personnel').classList.remove('on');
+  $('sh-personnel-form').classList.remove('on');
+  $('sh-comptes').classList.remove('on');
   if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
 }
 
@@ -1620,7 +1922,10 @@ function submitForm(e){
     charges:  S.mode==='C' ? montant : 0,
     produits: S.mode==='P' ? montant : 0,
     reglement:(S.mode==='C') ? (parseFloat($('frgl').value)||0) : (S.mode==='R' ? montant : 0),
-    obs:      $('fo').value
+    obs:      $('fo').value,
+    tiersId:     S.mode==='C' ? ($('ftiers').value || null) : null,
+    personnelId: S.mode==='C' ? ($('fpersonnel').value || null) : null,
+    quantite:    S.mode==='C' ? (parseFloat($('fquantite').value) || null) : null
   };
 
   function onDone(){ btn.classList.remove('ld'); btn.disabled=false; closeAll(); loadData(S.active); }
@@ -1806,11 +2111,17 @@ function handleStartupData(res, pin) {
     $('btnImportXls').style.display = '';
     $('btnUsers').style.display = '';
     $('btnListes').style.display = '';
+    $('btnChantiers').style.display = '';
+    $('btnTiers').style.display = '';
+    $('btnPersonnel').style.display = '';
   } else {
     $('btnExportXls').style.display = 'none';
     $('btnImportXls').style.display = 'none';
     $('btnUsers').style.display = 'none';
     $('btnListes').style.display = 'none';
+    $('btnChantiers').style.display = 'none';
+    $('btnTiers').style.display = 'none';
+    $('btnPersonnel').style.display = 'none';
   }
   S.chantiers = res.chantiers || [];
   
@@ -1865,9 +2176,10 @@ function renderUsersList(){
 }
 
 function renderUfChantiersList(selectedIds){
+  var sel = (selectedIds||[]).map(String);
   var h = '';
   (S.chantiers||[]).forEach(function(c){
-    var checked = (selectedIds||[]).indexOf(c.id) > -1 ? 'checked' : '';
+    var checked = sel.indexOf(String(c.id)) > -1 ? 'checked' : '';
     h += '<label class="vc-item" style="cursor:pointer">'+
       '<input type="checkbox" class="uf-chk" value="'+c.id+'" '+checked+'>'+
       '<div class="vc-label"><div class="vc-lib">'+escH(c.nom)+'</div></div>'+
@@ -1888,7 +2200,7 @@ function onUfTousChange(){
 
 function openUserForm(userId){
   closeAll();
-  var u = userId ? (S.usersList||[]).find(function(x){ return x.id === userId; }) : null;
+  var u = userId ? (S.usersList||[]).find(function(x){ return String(x.id) === String(userId); }) : null;
   S.editUserId = u ? u.id : null;
   $('uf-title').textContent = u ? ('Modifier — ' + u.nom) : 'Nouvel utilisateur';
   $('uf-nom').value = u ? u.nom : '';
@@ -1964,7 +2276,7 @@ function renderListesList(){
 
 function openListeForm(listeId){
   closeAll();
-  var l = listeId ? (S.listesList||[]).find(function(x){ return x.id === listeId; }) : null;
+  var l = listeId ? (S.listesList||[]).find(function(x){ return String(x.id) === String(listeId); }) : null;
   S.editListeId = l ? l.id : null;
   $('lf-title').textContent = l ? 'Modifier — ' + l.libelle : 'Nouveau libellé';
   $('lf-libelle').value = l ? l.libelle : '';
@@ -1972,7 +2284,7 @@ function openListeForm(listeId){
 
   var h = '<option value="">Tous les chantiers</option>';
   (S.chantiers||[]).forEach(function(c){
-    var sel = (l && l.chantierId === c.id) ? 'selected' : '';
+    var sel = (l && String(l.chantierId) === String(c.id)) ? 'selected' : '';
     h += '<option value="'+c.id+'" '+sel+'>'+escH(c.nom)+'</option>';
   });
   $('lf-chantier').innerHTML = h;
@@ -2009,6 +2321,226 @@ function deleteListeConfirm(){
       toast('Libellé supprimé','ok'); closeAll(); openListesPanel();
     })
     .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+/* ═══════════════════════════════════════
+   ADMIN : GESTION DES CHANTIERS
+═══════════════════════════════════════ */
+function openChantiersPanel(){
+  $('chantiers-list').innerHTML = '<div class="vc-empty">Chargement…</div>';
+  $('ov').classList.add('on');
+  $('sh-chantiers').classList.add('on');
+  callAPI('getChantiersAdmin', {})
+    .then(function(r){
+      if(r && r.error){ toast('Erreur: '+r.error,'er'); return; }
+      S.chantiersList = r||[]; renderChantiersList();
+    })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+function renderChantiersList(){
+  var h = '';
+  (S.chantiersList||[]).forEach(function(c){
+    h += '<div class="row" style="cursor:pointer" onclick="openChantierForm('+c.id+')">'+
+      '<div class="r1"><span class="lib">'+escH(c.nom)+'</span></div>'+
+    '</div>';
+  });
+  if(!h) h = '<div class="vc-empty">Aucun chantier</div>';
+  $('chantiers-list').innerHTML = h;
+}
+
+function openChantierForm(chantierId){
+  closeAll();
+  var c = chantierId ? (S.chantiersList||[]).find(function(x){ return String(x.id) === String(chantierId); }) : null;
+  S.editChantierId = c ? c.id : null;
+  $('cf-title').textContent = c ? 'Modifier — ' + c.nom : 'Nouveau chantier';
+  $('cf-nom').value = c ? c.nom : '';
+  $('btn-cf-del').style.display = c ? '' : 'none';
+  $('ov').classList.add('on');
+  $('sh-chantier-form').classList.add('on');
+}
+
+function saveChantier(){
+  var nom = $('cf-nom').value.trim();
+  if(!nom){ toast('Saisissez un nom de chantier','er'); return; }
+
+  var btn = $('btn-cf'); btn.classList.add('ld'); btn.disabled = true;
+  callAPI('saveChantier', { chantier: { id: S.editChantierId, nom: nom } })
+    .then(function(r){
+      btn.classList.remove('ld'); btn.disabled = false;
+      if(r.error){ toast('Erreur: '+r.error,'er'); return; }
+      toast('✓ Chantier enregistré','ok');
+      closeAll();
+      openChantiersPanel();
+    })
+    .catch(function(e){ btn.classList.remove('ld'); btn.disabled = false; toast('Erreur: '+e.message,'er'); });
+}
+
+function deleteChantierConfirm(){
+  if(!S.editChantierId) return;
+  if(!confirm('Supprimer définitivement ce chantier ?')) return;
+  callAPI('deleteChantier', { chantierId: S.editChantierId })
+    .then(function(r){
+      if(r && r.error){ toast('Erreur: '+r.error,'er'); return; }
+      toast('Chantier supprimé','ok'); closeAll(); openChantiersPanel();
+    })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+/* ═══════════════════════════════════════
+   ADMIN : GESTION DES TIERS
+═══════════════════════════════════════ */
+function openTiersPanel(){
+  $('tiers-list').innerHTML = '<div class="vc-empty">Chargement…</div>';
+  $('ov').classList.add('on');
+  $('sh-tiers').classList.add('on');
+  callAPI('getTiersAdmin', {})
+    .then(function(r){ S.tiersList = r||[]; renderTiersList(); })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+function renderTiersList(){
+  var h = '';
+  (S.tiersList||[]).forEach(function(t){
+    var sub = (t.type||'Non précisé') + (t.actif===false ? ' — inactif' : '');
+    h += '<div class="row" style="cursor:pointer" onclick="openTiersForm('+t.id+')">'+
+      '<div class="r1"><span class="lib">'+escH(t.nom)+'</span></div>'+
+      '<div class="robs">'+escH(sub)+'</div>'+
+    '</div>';
+  });
+  if(!h) h = '<div class="vc-empty">Aucun tiers</div>';
+  $('tiers-list').innerHTML = h;
+}
+
+function openTiersForm(tiersId){
+  closeAll();
+  var t = tiersId ? (S.tiersList||[]).find(function(x){ return String(x.id) === String(tiersId); }) : null;
+  S.editTiersId = t ? t.id : null;
+  $('tf-title').textContent = t ? 'Modifier — ' + t.nom : 'Nouveau tiers';
+  $('tf-nom').value = t ? t.nom : '';
+  $('tf-type').value = t ? (t.type||'') : '';
+  $('tf-actif').checked = t ? (t.actif!==false) : true;
+  $('btn-tf-del').style.display = t ? '' : 'none';
+  $('ov').classList.add('on');
+  $('sh-tiers-form').classList.add('on');
+}
+
+function saveTiers(){
+  var nom = $('tf-nom').value.trim();
+  if(!nom){ toast('Saisissez un nom','er'); return; }
+  var btn = $('btn-tf'); btn.classList.add('ld'); btn.disabled = true;
+  callAPI('saveTiers', { tiers: { id: S.editTiersId, nom: nom, type: $('tf-type').value, actif: $('tf-actif').checked } })
+    .then(function(r){
+      btn.classList.remove('ld'); btn.disabled = false;
+      if(r && r.error){ toast('Erreur: '+r.error,'er'); return; }
+      toast('✓ Tiers enregistré','ok');
+      closeAll(); openTiersPanel();
+    })
+    .catch(function(e){ btn.classList.remove('ld'); btn.disabled = false; toast('Erreur: '+e.message,'er'); });
+}
+
+function deleteTiersConfirm(){
+  if(!S.editTiersId) return;
+  if(!confirm('Supprimer définitivement ce tiers ?')) return;
+  callAPI('deleteTiers', { tiersId: S.editTiersId })
+    .then(function(){ toast('Tiers supprimé','ok'); closeAll(); openTiersPanel(); })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+/* ═══════════════════════════════════════
+   ADMIN : GESTION DU PERSONNEL
+═══════════════════════════════════════ */
+function openPersonnelPanel(){
+  $('personnel-list').innerHTML = '<div class="vc-empty">Chargement…</div>';
+  $('ov').classList.add('on');
+  $('sh-personnel').classList.add('on');
+  callAPI('getPersonnelAdmin', {})
+    .then(function(r){ S.personnelList = r||[]; renderPersonnelList(); })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+function renderPersonnelList(){
+  var h = '';
+  (S.personnelList||[]).forEach(function(p){
+    var mode = p.modePaie==='unite' ? 'À l\'unité' : 'Journalier';
+    var sub = mode + ' — ' + fN(p.tauxDefaut||0) + ' DA' + (p.actif===false ? ' — inactif' : '');
+    h += '<div class="row" style="cursor:pointer" onclick="openPersonnelForm('+p.id+')">'+
+      '<div class="r1"><span class="lib">'+escH(p.nom)+'</span></div>'+
+      '<div class="robs">'+escH(sub)+'</div>'+
+    '</div>';
+  });
+  if(!h) h = '<div class="vc-empty">Aucun employé</div>';
+  $('personnel-list').innerHTML = h;
+}
+
+function openPersonnelForm(personnelId){
+  closeAll();
+  var p = personnelId ? (S.personnelList||[]).find(function(x){ return String(x.id) === String(personnelId); }) : null;
+  S.editPersonnelId = p ? p.id : null;
+  $('pf-title').textContent = p ? 'Modifier — ' + p.nom : 'Nouvel employé';
+  $('pf-nom').value = p ? p.nom : '';
+  $('pf-mode').value = p ? (p.modePaie||'journalier') : 'journalier';
+  $('pf-taux').value = p ? (p.tauxDefaut||'') : '';
+  $('pf-actif').checked = p ? (p.actif!==false) : true;
+  $('btn-pf-del').style.display = p ? '' : 'none';
+  $('ov').classList.add('on');
+  $('sh-personnel-form').classList.add('on');
+}
+
+function savePersonnel(){
+  var nom = $('pf-nom').value.trim();
+  if(!nom){ toast('Saisissez un nom','er'); return; }
+  var btn = $('btn-pf'); btn.classList.add('ld'); btn.disabled = true;
+  callAPI('savePersonnel', { personnel: {
+    id: S.editPersonnelId, nom: nom, modePaie: $('pf-mode').value,
+    tauxDefaut: parseFloat($('pf-taux').value)||0, actif: $('pf-actif').checked
+  }})
+    .then(function(r){
+      btn.classList.remove('ld'); btn.disabled = false;
+      if(r && r.error){ toast('Erreur: '+r.error,'er'); return; }
+      toast('✓ Employé enregistré','ok');
+      closeAll(); openPersonnelPanel();
+    })
+    .catch(function(e){ btn.classList.remove('ld'); btn.disabled = false; toast('Erreur: '+e.message,'er'); });
+}
+
+function deletePersonnelConfirm(){
+  if(!S.editPersonnelId) return;
+  if(!confirm('Supprimer définitivement cet employé ?')) return;
+  callAPI('deletePersonnel', { personnelId: S.editPersonnelId })
+    .then(function(){ toast('Employé supprimé','ok'); closeAll(); openPersonnelPanel(); })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+/* ═══════════════════════════════════════
+   COMPTES : soldes tiers / personnel du chantier actif
+═══════════════════════════════════════ */
+function openComptesPanel(){
+  if(!S.active){ toast('Sélectionne un chantier','er'); return; }
+  $('comptes-tiers-list').innerHTML = '<div class="vc-empty">Chargement…</div>';
+  $('comptes-personnel-list').innerHTML = '';
+  $('ov').classList.add('on');
+  $('sh-comptes').classList.add('on');
+  callAPI('getSoldesTiers', {chantier: S.active})
+    .then(function(r){ S.comptesTiers = (r||[]).filter(function(x){ return x.totalCharges>0; }); renderComptes('comptes-tiers-list', S.comptesTiers); })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+  callAPI('getSoldesPersonnel', {chantier: S.active})
+    .then(function(r){ S.comptesPersonnel = (r||[]).filter(function(x){ return x.totalCharges>0; }); renderComptes('comptes-personnel-list', S.comptesPersonnel); })
+    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+}
+
+function renderComptes(elId, list){
+  var h = '';
+  list.forEach(function(c){
+    var soldeCls = c.solde>0 ? 'c' : 'p';
+    var soldeLbl = c.solde>0 ? 'Reste dû' : 'Soldé';
+    h += '<div class="row">'+
+      '<div class="r1"><span class="lib">'+escH(c.nom)+'</span></div>'+
+      '<div class="r2"><span class="c">Charges '+fN(c.totalCharges)+'</span><span class="p">Réglé '+fN(c.totalRegle)+'</span><span class="'+soldeCls+'">'+soldeLbl+' '+fN(Math.abs(c.solde))+'</span></div>'+
+    '</div>';
+  });
+  if(!h) h = '<div class="vc-empty">Aucune charge liée</div>';
+  $(elId).innerHTML = h;
 }
 
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
