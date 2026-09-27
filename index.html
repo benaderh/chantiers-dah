@@ -190,6 +190,28 @@
       cursor:pointer}
     #ov.on{opacity:1;visibility:visible}
 
+    /* ═══ MODALE DE CONFIRMATION ═══ */
+    .confirm-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;
+      opacity:0;visibility:hidden;transition:opacity .25s;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+    .confirm-ov.on{opacity:1;visibility:visible}
+    .confirm-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-45%) scale(.94);
+      width:min(340px,88vw);background:var(--card);border-radius:18px;padding:24px 20px 20px;
+      z-index:301;opacity:0;visibility:hidden;text-align:center;
+      transition:transform .25s cubic-bezier(.32,.72,0,1),opacity .25s;
+      box-shadow:0 12px 50px rgba(0,0,0,.55);border:1px solid var(--brd)}
+    .confirm-modal.on{opacity:1;visibility:visible;transform:translate(-50%,-50%) scale(1)}
+    .confirm-icon{font-size:32px;margin-bottom:6px}
+    .confirm-title{font-size:17px;font-weight:800;color:var(--wh);margin-bottom:8px}
+    .confirm-msg{font-size:14px;color:var(--mut);line-height:1.5;margin-bottom:18px}
+    .confirm-actions{display:flex;gap:10px}
+    .confirm-actions .btn-cancel,.confirm-actions .btn-del{margin-top:0;flex:1}
+    .error-body{text-align:left;background:var(--inp);border:1.5px solid var(--brd);border-radius:12px;
+      padding:12px 14px;margin-bottom:18px}
+    .error-row{display:flex;flex-direction:column;gap:2px;margin-bottom:10px}
+    .error-row:last-child{margin-bottom:0}
+    .error-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--mut)}
+    .error-val{font-size:13.5px;color:var(--txt);line-height:1.45;word-break:break-word}
+
     /* ═══ BOTTOM SHEETS ═══ */
     .bsheet{position:fixed;bottom:0;left:0;right:0;z-index:100;
       background:var(--card);border-top-left-radius:22px;border-top-right-radius:22px;
@@ -381,6 +403,7 @@
     <button class="btn-quit" id="btnTiers" style="display:none;margin-right:6px" onclick="openTiersPanel()" title="Gérer les tiers">🤝</button>
     <button class="btn-quit" id="btnPersonnel" style="display:none;margin-right:6px" onclick="openPersonnelPanel()" title="Gérer le personnel">👷</button>
     <button class="btn-quit" id="btnComptes" style="margin-right:6px" onclick="openComptesPanel()" title="Comptes tiers / personnel">💰</button>
+    <button class="btn-quit" id="btnEtatCharges" style="margin-right:6px" onclick="openEtatChargesPanel()" title="État des charges (filtres)">📊</button>
     <button class="btn-quit" id="btnImportXls" style="display:none;margin-right:6px" onclick="$('xlsFile').click()" title="Importer depuis Excel">⬆️</button>
     <button class="btn-quit" id="btnExportXls" style="display:none;margin-right:6px" onclick="exportExcel()" title="Exporter toutes les données en Excel">⬇️ Excel</button>
     <button class="btn-quit" onclick="doLogout()">Déconnexion</button>
@@ -415,6 +438,33 @@
 
 <!-- OVERLAY -->
 <div id="ov" onclick="closeAll(event)"></div>
+
+<!-- ═══ MODALE DE CONFIRMATION (remplace confirm() natif) ═══ -->
+<div id="confirm-ov" class="confirm-ov" onclick="closeConfirm()"></div>
+<div id="confirm-modal" class="confirm-modal">
+  <div class="confirm-icon">🗑️</div>
+  <div class="confirm-title" id="confirm-title">Confirmer la suppression</div>
+  <div class="confirm-msg" id="confirm-msg"></div>
+  <div class="confirm-actions">
+    <button type="button" class="btn-cancel" onclick="closeConfirm()">Annuler</button>
+    <button type="button" class="btn-del" id="confirm-btn" onclick="_confirmYes()">🗑 Supprimer</button>
+  </div>
+</div>
+
+<!-- ═══ MODALE D'ERREUR (remplace alert() natif) ═══ -->
+<div id="error-ov" class="confirm-ov" onclick="closeError()"></div>
+<div id="error-modal" class="confirm-modal">
+  <div class="confirm-icon">⚠️</div>
+  <div class="confirm-title" id="error-title" style="color:var(--rd)">Erreur</div>
+  <div class="error-body">
+    <div class="error-row"><span class="error-label">Détail</span><span id="error-detail" class="error-val"></span></div>
+    <div class="error-row"><span class="error-label">Source</span><span id="error-source" class="error-val"></span></div>
+    <div class="error-row"><span class="error-label">Que faire</span><span id="error-whattodo" class="error-val"></span></div>
+  </div>
+  <div class="confirm-actions">
+    <button type="button" class="btn-s" style="margin-top:0" onclick="closeError()">Fermer</button>
+  </div>
+</div>
 
 <!-- ═══ BOTTOM SHEET : Saisie Charge / Produit ═══ -->
 <div id="sh" class="bsheet">
@@ -618,9 +668,8 @@
   <div class="fg">
     <label for="lf-cp">Type</label>
     <select id="lf-cp">
-      <option value="">Charge + Produit</option>
-      <option value="C">Charge uniquement</option>
-      <option value="P">Produit uniquement</option>
+      <option value="C">Charge</option>
+      <option value="P">Produit</option>
     </select>
   </div>
   <div class="form-actions">
@@ -751,6 +800,48 @@
   <div id="comptes-tiers-list" style="margin-bottom:14px"></div>
   <div class="stit" style="padding:0 0 6px">Personnel</div>
   <div id="comptes-personnel-list" style="margin-bottom:14px"></div>
+  <div class="form-actions">
+    <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Fermer</button>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM SHEET : État des charges (filtres) ═══ -->
+<div id="sh-etat-charges" class="bsheet" style="max-height:94vh">
+  <div class="hdl"></div>
+  <h2>📊 État des charges</h2>
+  <div class="fg">
+    <label for="ec-vue">Vue</label>
+    <select id="ec-vue" onchange="applyEtatCharges()">
+      <option value="global">Charge globale</option>
+      <option value="libelle">Par libellé</option>
+      <option value="tiers">Par tiers</option>
+      <option value="personnel">Par personnel</option>
+    </select>
+  </div>
+  <div class="fr2">
+    <div class="fg">
+      <label for="ec-date-debut">Du</label>
+      <input type="date" id="ec-date-debut">
+    </div>
+    <div class="fg">
+      <label for="ec-date-fin">Au</label>
+      <input type="date" id="ec-date-fin">
+    </div>
+  </div>
+  <div class="fg">
+    <label for="ec-libelle">Libellé</label>
+    <select id="ec-libelle"><option value="">Tous</option></select>
+  </div>
+  <div class="fg">
+    <label for="ec-tiers">Tiers</label>
+    <select id="ec-tiers"><option value="">Tous</option></select>
+  </div>
+  <div class="fg">
+    <label for="ec-personnel">Personnel</label>
+    <select id="ec-personnel"><option value="">Tous</option></select>
+  </div>
+  <button type="button" class="btn-s" onclick="applyEtatCharges()"><span>🔎 Filtrer</span></button>
+  <div id="ec-results" style="margin-top:16px"></div>
   <div class="form-actions">
     <button type="button" class="btn-cancel" onclick="closeAll(event)">✕ Fermer</button>
   </div>
@@ -1082,8 +1173,13 @@ async function exportExcel(){
 }
 
 function importExcel(file){
-  if(!confirm('⚠️ Ceci va SUPPRIMER puis REMPLACER TOUTES les données (utilisateurs, permissions, chantiers, listes, saisies, versements) par le contenu de ce fichier Excel.\n\nCette action est irréversible. Continuer ?')) return;
-
+  showConfirm(
+    '⚠️ Ceci va SUPPRIMER puis REMPLACER TOUTES les données (utilisateurs, permissions, chantiers, listes, saisies, versements) par le contenu de ce fichier Excel.\n\nCette action est irréversible. Continuer ?',
+    function(){ _doImportExcel(file); },
+    'Remplacer toutes les données ?'
+  );
+}
+function _doImportExcel(file){
   showBar(true);
   var reader = new FileReader();
   reader.onload = async function(e){
@@ -1104,8 +1200,8 @@ function importExcel(file){
       toast('✓ Import terminé, données remplacées', 'ok');
       setTimeout(function(){ location.reload(); }, 1200);
     } catch(err) {
-      toast('Erreur import: ' + err.message, 'er');
       showBar(false);
+      showError(err.message, 'Import Excel — admin_import_all', 'Vérifiez que le fichier Excel respecte le modèle attendu (feuilles Utilisateurs, Chantiers, Listes, Saisies, Versements), puis réessayez. Si l\'erreur persiste, contactez l\'administrateur.');
     }
   };
   reader.readAsArrayBuffer(file);
@@ -1564,7 +1660,7 @@ function submitVersement(){
 }
 
 function deleteVersement(vid){
-  if(!confirm('Supprimer le versement '+vid+' ?\nLes charges seront de nouveau disponibles.')) return;
+  showConfirm('Supprimer le versement '+vid+' ?\nLes charges seront de nouveau disponibles.', function(){
   callAPI('supprimerVersement',{chantier:S.active, versementId:vid})
     .then(function(){
       toast('Versement supprimé','ok');
@@ -1573,6 +1669,7 @@ function deleteVersement(vid){
       callAPI('getSaisies',{chantier:S.active}).then(function(d){ S.saisies=d||[]; renderHistory(); });
     })
     .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+  });
 }
 
 /* ═══════════════════════════════════════
@@ -1849,7 +1946,7 @@ function updateRglHint(){
 
 function editRow(rowNum){
   var s=null;
-  S.saisies.forEach(function(x){ if(x.rowNum===rowNum) s=x; });
+  S.saisies.forEach(function(x){ if(String(x.rowNum)===String(rowNum)) s=x; });
   if(!s) return;
   S.editRow=rowNum;
   var eMode=s.charges>0?'C':(s.produits>0?'P':(s.reglement>0?'R':S.mode||'C'));
@@ -1898,6 +1995,7 @@ function closeAll(e){
   $('sh-personnel').classList.remove('on');
   $('sh-personnel-form').classList.remove('on');
   $('sh-comptes').classList.remove('on');
+  $('sh-etat-charges').classList.remove('on');
   if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
 }
 
@@ -1942,11 +2040,52 @@ function submitForm(e){
 
 function doDelete(){
   if(!S.editRow||!S.active) return;
-  if(!confirm('Supprimer cette saisie ?')) return;
-  var btn=$('btn'); btn.disabled=true;
-  callAPI('supprimerSaisie',{chantier:S.active, rowNum:S.editRow})
-    .then(function(){ toast('Supprimé','ok'); btn.disabled=false; closeAll(); loadData(S.active); })
-    .catch(function(er){ btn.disabled=false; toast('Erreur: '+er.message,'er'); });
+  showConfirm('Supprimer cette saisie ?', function(){
+    var btn=$('btn'); btn.disabled=true;
+    callAPI('supprimerSaisie',{chantier:S.active, rowNum:S.editRow})
+      .then(function(){ toast('Supprimé','ok'); btn.disabled=false; closeAll(); loadData(S.active); })
+      .catch(function(er){ btn.disabled=false; toast('Erreur: '+er.message,'er'); });
+  });
+}
+
+/* ═══════════════════════════════════════
+   CONFIRMATION (modale, remplace confirm() natif)
+═══════════════════════════════════════ */
+var _confirmCb = null;
+function showConfirm(msg, cb, title){
+  $('confirm-title').textContent = title || 'Confirmer la suppression';
+  $('confirm-msg').textContent = msg;
+  _confirmCb = cb;
+  $('confirm-ov').classList.add('on');
+  $('confirm-modal').classList.add('on');
+}
+function closeConfirm(){
+  $('confirm-ov').classList.remove('on');
+  $('confirm-modal').classList.remove('on');
+  _confirmCb = null;
+}
+function _confirmYes(){
+  var cb = _confirmCb;
+  closeConfirm();
+  if(cb) cb();
+}
+
+/* ═══════════════════════════════════════
+   ERREUR (modale, remplace alert() natif)
+   Règle générale de l'app : aucune boîte de dialogue
+   navigateur (confirm/alert/prompt). Toute erreur passe
+   par cette modale avec Détail / Source / Que faire.
+═══════════════════════════════════════ */
+function showError(detail, source, whatToDo){
+  $('error-detail').textContent = detail || '—';
+  $('error-source').textContent = source || '—';
+  $('error-whattodo').textContent = whatToDo || 'Réessayez. Si le problème persiste, contactez l\'administrateur.';
+  $('error-ov').classList.add('on');
+  $('error-modal').classList.add('on');
+}
+function closeError(){
+  $('error-ov').classList.remove('on');
+  $('error-modal').classList.remove('on');
 }
 
 /* ═══════════════════════════════════════
@@ -2076,17 +2215,15 @@ function doLogin() {
           $('login-pin').value = '';
           handleStartupData(res, pin);
         } else {
-          toast(res.error || 'Erreur d\'authentification', 'er');
-          alert("Login refusé : " + (res.error || 'Erreur d\'authentification'));
+          showError(res.error || 'Erreur d\'authentification', 'Connexion — Identification utilisateur', 'Vérifiez le Nom et le PIN saisis, puis réessayez.');
         }
       })
       .catch(function(e){
         btn.classList.remove('ld'); btn.disabled = false;
-        toast(e.message, 'er');
-        alert("Erreur de connexion : " + e.message);
+        showError(e.message, 'Connexion au serveur (getStartupData)', 'Vérifiez votre connexion internet et réessayez. Si le problème persiste, contactez l\'administrateur.');
       });
   } catch (err) {
-    alert("Erreur Javascript : " + err.message);
+    showError(err.message, 'Application — doLogin()', 'Rechargez la page. Si l\'erreur se répète, contactez l\'administrateur avec le détail ci-dessus.');
   }
 }
 
@@ -2239,10 +2376,11 @@ function saveUser(){
 
 function deleteUserConfirm(){
   if(!S.editUserId) return;
-  if(!confirm('Supprimer définitivement cet utilisateur ?')) return;
-  callAPI('deleteUser', { userId: S.editUserId })
-    .then(function(){ toast('Utilisateur supprimé','ok'); closeAll(); openUsersPanel(); })
-    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+  showConfirm('Supprimer définitivement cet utilisateur ?', function(){
+    callAPI('deleteUser', { userId: S.editUserId })
+      .then(function(){ toast('Utilisateur supprimé','ok'); closeAll(); openUsersPanel(); })
+      .catch(function(e){ showError(e.message, 'Suppression utilisateur — deleteUser', 'Réessayez. Si l\'erreur persiste, contactez l\'administrateur.'); });
+  });
 }
 
 /* ═══════════════════════════════════════
@@ -2264,7 +2402,7 @@ function renderListesList(){
   var h = '';
   (S.listesList||[]).forEach(function(l){
     var portee = l.chantierId ? escH(l.chantierNom || ('#'+l.chantierId)) : 'Tous les chantiers';
-    var type = l.cp === 'C' ? 'Charge' : (l.cp === 'P' ? 'Produit' : 'Charge + Produit');
+    var type = l.cp === 'P' ? 'Produit' : 'Charge';
     h += '<div class="row" style="cursor:pointer" onclick="openListeForm('+l.id+')">'+
       '<div class="r1"><span class="lib">'+escH(l.libelle)+'</span></div>'+
       '<div class="robs">'+portee+' — '+type+'</div>'+
@@ -2280,7 +2418,7 @@ function openListeForm(listeId){
   S.editListeId = l ? l.id : null;
   $('lf-title').textContent = l ? 'Modifier — ' + l.libelle : 'Nouveau libellé';
   $('lf-libelle').value = l ? l.libelle : '';
-  $('lf-cp').value = l ? (l.cp || '') : '';
+  $('lf-cp').value = l ? (l.cp === 'P' ? 'P' : 'C') : 'C';
 
   var h = '<option value="">Tous les chantiers</option>';
   (S.chantiers||[]).forEach(function(c){
@@ -2314,13 +2452,14 @@ function saveListe(){
 
 function deleteListeConfirm(){
   if(!S.editListeId) return;
-  if(!confirm('Supprimer définitivement ce libellé ?')) return;
-  callAPI('deleteListe', { listeId: S.editListeId })
-    .then(function(r){
-      if(r && r.error){ toast('Erreur: '+r.error,'er'); return; }
-      toast('Libellé supprimé','ok'); closeAll(); openListesPanel();
-    })
-    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+  showConfirm('Supprimer définitivement ce libellé ?', function(){
+    callAPI('deleteListe', { listeId: S.editListeId })
+      .then(function(r){
+        if(r && r.error){ showError(r.error, 'Suppression libellé — deleteListe', 'Réessayez. Si l\'erreur persiste, contactez l\'administrateur.'); return; }
+        toast('Libellé supprimé','ok'); closeAll(); openListesPanel();
+      })
+      .catch(function(e){ showError(e.message, 'Suppression libellé — deleteListe', 'Réessayez. Si l\'erreur persiste, contactez l\'administrateur.'); });
+  });
 }
 
 /* ═══════════════════════════════════════
@@ -2378,13 +2517,14 @@ function saveChantier(){
 
 function deleteChantierConfirm(){
   if(!S.editChantierId) return;
-  if(!confirm('Supprimer définitivement ce chantier ?')) return;
-  callAPI('deleteChantier', { chantierId: S.editChantierId })
-    .then(function(r){
-      if(r && r.error){ toast('Erreur: '+r.error,'er'); return; }
-      toast('Chantier supprimé','ok'); closeAll(); openChantiersPanel();
-    })
-    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+  showConfirm('Supprimer définitivement ce chantier ?', function(){
+    callAPI('deleteChantier', { chantierId: S.editChantierId })
+      .then(function(r){
+        if(r && r.error){ showError(r.error, 'Suppression chantier — deleteChantier', 'Réessayez. Si l\'erreur persiste, contactez l\'administrateur.'); return; }
+        toast('Chantier supprimé','ok'); closeAll(); openChantiersPanel();
+      })
+      .catch(function(e){ showError(e.message, 'Suppression chantier — deleteChantier', 'Réessayez. Si l\'erreur persiste, contactez l\'administrateur.'); });
+  });
 }
 
 /* ═══════════════════════════════════════
@@ -2441,10 +2581,11 @@ function saveTiers(){
 
 function deleteTiersConfirm(){
   if(!S.editTiersId) return;
-  if(!confirm('Supprimer définitivement ce tiers ?')) return;
-  callAPI('deleteTiers', { tiersId: S.editTiersId })
-    .then(function(){ toast('Tiers supprimé','ok'); closeAll(); openTiersPanel(); })
-    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+  showConfirm('Supprimer définitivement ce tiers ?', function(){
+    callAPI('deleteTiers', { tiersId: S.editTiersId })
+      .then(function(){ toast('Tiers supprimé','ok'); closeAll(); openTiersPanel(); })
+      .catch(function(e){ showError(e.message, 'Suppression tiers — deleteTiers', 'Réessayez. Si l\'erreur persiste, contactez l\'administrateur.'); });
+  });
 }
 
 /* ═══════════════════════════════════════
@@ -2506,10 +2647,11 @@ function savePersonnel(){
 
 function deletePersonnelConfirm(){
   if(!S.editPersonnelId) return;
-  if(!confirm('Supprimer définitivement cet employé ?')) return;
-  callAPI('deletePersonnel', { personnelId: S.editPersonnelId })
-    .then(function(){ toast('Employé supprimé','ok'); closeAll(); openPersonnelPanel(); })
-    .catch(function(e){ toast('Erreur: '+e.message,'er'); });
+  showConfirm('Supprimer définitivement cet employé ?', function(){
+    callAPI('deletePersonnel', { personnelId: S.editPersonnelId })
+      .then(function(){ toast('Employé supprimé','ok'); closeAll(); openPersonnelPanel(); })
+      .catch(function(e){ showError(e.message, 'Suppression employé — deletePersonnel', 'Réessayez. Si l\'erreur persiste, contactez l\'administrateur.'); });
+  });
 }
 
 /* ═══════════════════════════════════════
@@ -2543,8 +2685,142 @@ function renderComptes(elId, list){
   $(elId).innerHTML = h;
 }
 
+/* ═══════════════════════════════════════
+   ÉTAT DES CHARGES (formulaire avec filtres)
+═══════════════════════════════════════ */
+function openEtatChargesPanel(){
+  if(!S.active){ toast('Sélectionne un chantier','er'); return; }
+
+  // Libellés (déduits des charges déjà chargées pour ce chantier)
+  var libs = {};
+  (S.saisies||[]).forEach(function(s){ if(s.charges>0 && s.libelle) libs[s.libelle]=1; });
+  var libArr = Object.keys(libs).sort(function(a,b){ return a.localeCompare(b,'fr'); });
+  var hl = '<option value="">Tous</option>';
+  libArr.forEach(function(l){ hl += '<option value="'+escH(l)+'">'+escH(l)+'</option>'; });
+  $('ec-libelle').innerHTML = hl;
+
+  $('ec-tiers').innerHTML = '<option value="">Tous</option>';
+  $('ec-personnel').innerHTML = '<option value="">Tous</option>';
+  $('ec-results').innerHTML = '<div class="vc-empty">Chargement…</div>';
+
+  $('ec-date-debut').value=''; $('ec-date-fin').value=''; $('ec-vue').value='global';
+
+  $('ov').classList.add('on');
+  $('sh-etat-charges').classList.add('on');
+
+  // Chargement à jour des listes tiers/personnel (ne pas dépendre du cache global)
+  callAPI('getTiers',{})
+    .then(function(d){
+      S.tiersList = d||[];
+      fillTPSelect('ec-tiers', S.tiersList, '');
+      $('ec-tiers').options[0].text = 'Tous';
+    })
+    .catch(function(e){ showError(e.message, 'Chargement tiers — getTiers', 'Réessayez. Si l\'erreur persiste, contactez l\'administrateur.'); });
+  callAPI('getPersonnel',{})
+    .then(function(d){
+      S.personnelList = d||[];
+      fillTPSelect('ec-personnel', S.personnelList, '');
+      $('ec-personnel').options[0].text = 'Tous';
+    })
+    .catch(function(e){ showError(e.message, 'Chargement personnel — getPersonnel', 'Réessayez. Si l\'erreur persiste, contactez l\'administrateur.'); });
+
+  applyEtatCharges();
+}
+
+function applyEtatCharges(){
+  var vue = $('ec-vue').value;
+  var du = $('ec-date-debut').value;
+  var au = $('ec-date-fin').value;
+  var libF = $('ec-libelle').value;
+  var tiersF = $('ec-tiers').value;
+  var persF = $('ec-personnel').value;
+
+  var rows = (S.saisies||[]).filter(function(s){
+    if(!(s.charges>0)) return false;
+    if(du && s.date < du) return false;
+    if(au && s.date > au) return false;
+    if(libF && s.libelle !== libF) return false;
+    if(tiersF && String(s.tiersId||'') !== String(tiersF)) return false;
+    if(persF && String(s.personnelId||'') !== String(persF)) return false;
+    return true;
+  });
+
+  function groupKey(s){
+    if(vue==='libelle') return s.libelle || '(sans libellé)';
+    if(vue==='tiers'){
+      var t = s.tiersId ? (S.tiersList||[]).find(function(x){ return String(x.id)===String(s.tiersId); }) : null;
+      return t ? t.nom : 'Sans tiers';
+    }
+    if(vue==='personnel'){
+      var p = s.personnelId ? (S.personnelList||[]).find(function(x){ return String(x.id)===String(s.personnelId); }) : null;
+      return p ? p.nom : 'Sans personnel';
+    }
+    return null; // global : pas de groupement
+  }
+
+  var sorted = rows.slice().sort(function(a,b){
+    if(vue!=='global'){
+      var ka=groupKey(a)||'', kb=groupKey(b)||'';
+      if(ka!==kb) return ka.localeCompare(kb,'fr');
+    }
+    return (a.date||'').localeCompare(b.date||'');
+  });
+
+  var h='';
+  var totMontant=0, totRegle=0;
+  var curGroup=null, subM=0, subR=0, subN=0, started=false;
+
+  function flushSubtotal(){
+    var subA = Math.max(0, subM-subR);
+    h += '<div class="row" style="border-left:3px solid var(--acc);background:rgba(255,255,255,.03)">'+
+      '<div class="r1"><span class="lib" style="font-weight:700">Sous-total — '+escH(curGroup)+'</span><span class="dcol">'+subN+' saisie'+(subN>1?'s':'')+'</span></div>'+
+      '<div class="r2"><span class="c">Mt '+fN(subM)+'</span><span class="p">Réglé '+fN(subR)+'</span><span class="'+(subA>0?'c':'p')+'">À régler '+fN(subA)+'</span></div>'+
+    '</div>';
+  }
+
+  sorted.forEach(function(s){
+    var key = vue==='global' ? null : groupKey(s);
+    if(vue!=='global' && key!==curGroup){
+      if(started) flushSubtotal();
+      curGroup=key; subM=0; subR=0; subN=0; started=true;
+      h += '<div class="stit" style="padding:10px 0 4px">'+escH(key)+'</div>';
+    }
+    var regl = Math.min(s.reglement||0, s.charges||0);
+    var aReg = Math.max(0, (s.charges||0)-regl);
+    totMontant += s.charges||0; totRegle += regl;
+    subM += s.charges||0; subR += regl; subN++;
+
+    h += '<div class="row">'+
+      '<div class="r1"><span class="lib">'+escH(s.libelle||'—')+'</span><span class="dcol">'+fD(s.date)+'</span></div>'+
+      '<div class="r2"><span class="c">Mt '+fN(s.charges)+'</span><span class="p">Réglé '+fN(regl)+'</span><span class="'+(aReg>0?'c':'p')+'">À régler '+fN(aReg)+'</span></div>'+
+    '</div>';
+  });
+  if(vue!=='global' && started) flushSubtotal();
+  if(!h) h = '<div class="vc-empty">Aucune charge pour ces filtres</div>';
+
+  var totA = Math.max(0, totMontant-totRegle);
+  h += '<div class="row" style="border:1.5px solid var(--brd);margin-top:6px">'+
+    '<div class="r1"><span class="lib" style="font-weight:800">TOTAL</span></div>'+
+    '<div class="r2"><span class="c" style="font-weight:800">Mt '+fN(totMontant)+'</span><span class="p" style="font-weight:800">Réglé '+fN(totRegle)+'</span><span class="'+(totA>0?'c':'p')+'" style="font-weight:800">À régler '+fN(totA)+'</span></div>'+
+  '</div>';
+
+  $('ec-results').innerHTML = h;
+}
+
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
 else init();
+
+/* ═══════════════════════════════════════
+   FILET DE SÉCURITÉ : erreurs JS non prévues
+   (garantit qu'aucune erreur ne passe par une
+   boîte de dialogue navigateur ni ne reste muette)
+═══════════════════════════════════════ */
+window.addEventListener('error', function(e){
+  try{ showError(e.message, (e.filename?e.filename.split('/').pop()+':'+e.lineno:'Application') , 'Rechargez la page. Si l\'erreur se répète, contactez l\'administrateur avec le détail ci-dessus.'); }catch(_){}
+});
+window.addEventListener('unhandledrejection', function(e){
+  try{ showError((e.reason&&e.reason.message)||String(e.reason), 'Application — promesse non gérée', 'Rechargez la page. Si l\'erreur se répète, contactez l\'administrateur avec le détail ci-dessus.'); }catch(_){}
+});
 </script>
 </body>
 </html>
