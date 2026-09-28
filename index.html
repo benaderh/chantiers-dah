@@ -848,17 +848,16 @@
   </div>
   <div class="fg">
     <label for="ec-libelle">Libellé</label>
-    <select id="ec-libelle" onchange="applyEtatCharges()"><option value="">Tous</option></select>
+    <select id="ec-libelle" onchange="onEcLibelle()"><option value="">Tous</option></select>
   </div>
   <div class="fg">
     <label for="ec-tiers">Tiers</label>
-    <select id="ec-tiers" onchange="applyEtatCharges()"><option value="">Tous</option></select>
+    <select id="ec-tiers" onchange="onEcTiers()"><option value="">Tous</option></select>
   </div>
   <div class="fg">
     <label for="ec-personnel">Personnel</label>
-    <select id="ec-personnel" onchange="applyEtatCharges()"><option value="">Tous</option></select>
+    <select id="ec-personnel" onchange="onEcPersonnel()"><option value="">Tous</option></select>
   </div>
-  <button type="button" class="btn-s" onclick="applyEtatCharges()"><span><i data-ico="search"></i> Filtrer</span></button>
   <div id="ec-results" style="margin-top:16px"></div>
   <div class="form-actions">
     <button type="button" class="btn-cancel" onclick="closeAll(event)"><span><i data-ico="x"></i> Fermer</span></button>
@@ -2818,6 +2817,25 @@ function openEtatChargesPanel(){
     fillTPSelect('ec-personnel', S.personnelList, ''); $('ec-personnel').options[0].text = 'Tous';
     applyEtatCharges();
   });
+}
+
+/* Filtres exclusifs (application automatique, sans bouton) :
+   Libellé → Tiers/Personnel = Tous ; Personnel → Libellé = « Personnel », Tiers = Tous ; Tiers → Libellé/Personnel = Tous */
+function onEcLibelle(){
+  $('ec-tiers').value=''; $('ec-personnel').value='';
+  applyEtatCharges();
+}
+function onEcTiers(){
+  if($('ec-tiers').value){ $('ec-libelle').value=''; $('ec-personnel').value=''; }
+  applyEtatCharges();
+}
+function onEcPersonnel(){
+  if($('ec-personnel').value){
+    $('ec-tiers').value='';
+    var opt = Array.prototype.slice.call($('ec-libelle').options).find(function(o){ return normLib(o.value)===LIB_PERSONNEL; });
+    $('ec-libelle').value = opt ? opt.value : '';
+  }
+  applyEtatCharges();
 }
 
 /* Journal des charges : liste détaillée, date décroissante, avec total */
