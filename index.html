@@ -139,6 +139,8 @@
     .r1 .lib{font-size:15px;font-weight:700;color:var(--wh);
       flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .r1 .dcol{font-size:12px;color:var(--mut);font-weight:600;white-space:nowrap;text-align:right;margin-left:8px;flex-shrink:0;line-height:1.4}
+    .rwho{padding:1px 12px 2px;font-size:14px;font-weight:700;color:var(--wh)}
+    .rvers{padding:0 12px 2px;font-size:12px;font-weight:700;color:var(--org)}
     .robs{padding:1px 12px 3px;font-size:13px;color:var(--mut);font-style:italic}
     .r2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;padding:3px 12px 10px}
     .r2 span{font-size:14px;font-weight:700;text-align:center}
@@ -166,7 +168,7 @@
     .vsolde.moins{background:rgba(255,107,107,.15);color:var(--rd);border:1px solid rgba(255,107,107,.3)}
     .vcard-obs{padding:0 14px 8px;font-size:12px;color:var(--mut);font-style:italic}
     .vcard-detail{max-height:0;overflow:hidden;transition:max-height .3s ease;background:var(--card2);border-top:1px solid var(--brd)}
-    .vcard-detail.on{max-height:800px}
+    .vcard-detail.on{max-height:3000px}
     .vcard-detail-inner{padding:10px 14px}
     .vd-hd{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);font-weight:700;margin-bottom:8px}
     .vd-item{display:flex;justify-content:space-between;align-items:center;
@@ -327,6 +329,8 @@
       accent-color:var(--org);cursor:pointer}
     .vc-label{flex:1;min-width:0}
     .vc-lib{font-size:14px;font-weight:600;color:var(--wh);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .vc-who{font-size:13px;font-weight:700;color:var(--wh);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .vc-obs{font-size:12px;font-style:italic;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .vc-sub{font-size:11px;color:var(--mut);margin-top:1px}
     .vc-right{text-align:right;flex-shrink:0}
     .vc-amt{font-size:15px;font-weight:700;color:var(--rd)}
@@ -689,8 +693,8 @@
     <input type="text" id="lf-libelle" placeholder="ex: Ciment, Transport...">
   </div>
   <div class="fg">
-    <label for="lf-chantier">Chantier</label>
-    <select id="lf-chantier"><option value="">Tous les chantiers</option></select>
+    <label for="lf-tous">Chantiers</label>
+    <div id="lf-chantiers"></div>
   </div>
   <div class="fg">
     <label for="lf-cp">Type</label>
@@ -762,6 +766,10 @@
     </select>
   </div>
   <div class="fg">
+    <label for="tf-liste">Libellé (liste)</label>
+    <select id="tf-liste"><option value="">Aucun</option></select>
+  </div>
+  <div class="fg">
     <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--txt);cursor:pointer">
       <input type="checkbox" id="tf-actif" checked style="width:20px;height:20px;accent-color:var(--acc)">
       Actif
@@ -805,6 +813,10 @@
       <label for="pf-taux">Taux par défaut</label>
       <input type="number" id="pf-taux" min="0" step="1" inputmode="numeric" placeholder="0">
     </div>
+  </div>
+  <div class="fg">
+    <label for="pf-liste">Libellé (liste)</label>
+    <select id="pf-liste"><option value="">Aucun</option></select>
   </div>
   <div class="fg">
     <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--txt);cursor:pointer">
@@ -957,7 +969,7 @@ function callAPI(action, params) {
         }));
 
         resolve({
-          success: true, user: user, chantiers: userChantiers, activeChantier: active, saisies: saisies, libelles: (listesData||[]).map(l => l.libelle)
+          success: true, user: user, chantiers: userChantiers, activeChantier: active, saisies: saisies, libelles: (storeLibIds(listesData), (listesData||[]).map(l => l.libelle))
         });
       }
       else if (action === 'getChantiers') {
@@ -973,6 +985,7 @@ function callAPI(action, params) {
       else if (action === 'getLibellesForChantier') {
         const {data, error} = await supabase.rpc('get_libelles', {...auth(), p_chantier_id: params.chantier, p_mode: params.mode || null});
         if(error) throw error;
+        storeLibIds(data);
         resolve((data||[]).map(l => l.libelle));
       }
       else if (action === 'ajouterSaisie') {
@@ -1018,7 +1031,7 @@ function callAPI(action, params) {
                 let tranche = parts[1] ? Number(parts[1]) : 0;
                 let mDetail = tranche || cr.charges;
                 chargesCouvertes += mDetail;
-                details.push({ libelle: cr.libelle, charge: cr.charges, tranche: tranche || null });
+                details.push({ libelle: cr.libelle, charge: cr.charges, tranche: tranche || null, rowNum: cr.id, tiersId: cr.tiers_id, personnelId: cr.personnel_id, obs: cr.obs });
               }
             });
           });
@@ -1029,7 +1042,7 @@ function callAPI(action, params) {
       else if (action === 'getChargesPourVersement') {
         const {data, error} = await supabase.rpc('get_charges_pour_versement', {...auth(), p_chantier_id: params.chantier});
         if(error) throw error;
-        resolve((data||[]).map(s => ({ rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, reglement: s.reglement, refVers: s.ref_vers })));
+        resolve((data||[]).map(s => ({ rowNum: s.id, date: s.date, libelle: s.libelle, charges: s.charges, reglement: s.reglement, refVers: s.ref_vers, tiersId: s.tiers_id, personnelId: s.personnel_id, obs: s.obs })));
       }
       else if (action === 'ajouterVersement') {
         const {data: id, error} = await supabase.rpc('add_versement', {
@@ -1059,17 +1072,17 @@ function callAPI(action, params) {
       else if (action === 'getTiers') {
         const {data, error} = await supabase.rpc('get_tiers', auth());
         if(error) throw error;
-        resolve((data||[]).map(t => ({ id: t.id, nom: t.nom, type: t.type, actif: t.actif })));
+        resolve((data||[]).map(t => ({ id: t.id, nom: t.nom, type: t.type, actif: t.actif, listeId: t.liste_id })));
       }
       else if (action === 'getTiersAdmin') {
         const {data, error} = await supabase.rpc('get_tiers_admin', auth());
         if(error) throw error;
-        resolve((data||[]).map(t => ({ id: t.id, nom: t.nom, type: t.type, actif: t.actif })));
+        resolve((data||[]).map(t => ({ id: t.id, nom: t.nom, type: t.type, actif: t.actif, listeId: t.liste_id })));
       }
       else if (action === 'saveTiers') {
         const d = params.tiers;
         const {data: id, error} = await supabase.rpc('save_tiers_admin', {
-          ...auth(), p_id: d.id || null, p_tiers_nom: d.nom, p_type: d.type || null, p_actif: d.actif !== false
+          ...auth(), p_id: d.id || null, p_tiers_nom: d.nom, p_type: d.type || null, p_liste_id: d.listeId || null, p_actif: d.actif !== false
         });
         if(error) throw error;
         resolve({success: true, id: id});
@@ -1083,18 +1096,18 @@ function callAPI(action, params) {
       else if (action === 'getPersonnel') {
         const {data, error} = await supabase.rpc('get_personnel', auth());
         if(error) throw error;
-        resolve((data||[]).map(p => ({ id: p.id, nom: p.nom, modePaie: p.mode_paie, tauxDefaut: p.taux_defaut, actif: p.actif })));
+        resolve((data||[]).map(p => ({ id: p.id, nom: p.nom, modePaie: p.mode_paie, tauxDefaut: p.taux_defaut, actif: p.actif, listeId: p.liste_id })));
       }
       else if (action === 'getPersonnelAdmin') {
         const {data, error} = await supabase.rpc('get_personnel_admin', auth());
         if(error) throw error;
-        resolve((data||[]).map(p => ({ id: p.id, nom: p.nom, modePaie: p.mode_paie, tauxDefaut: p.taux_defaut, actif: p.actif })));
+        resolve((data||[]).map(p => ({ id: p.id, nom: p.nom, modePaie: p.mode_paie, tauxDefaut: p.taux_defaut, actif: p.actif, listeId: p.liste_id })));
       }
       else if (action === 'savePersonnel') {
         const d = params.personnel;
         const {data: id, error} = await supabase.rpc('save_personnel_admin', {
           ...auth(), p_id: d.id || null, p_personnel_nom: d.nom, p_mode_paie: d.modePaie || 'journalier',
-          p_taux_defaut: d.tauxDefaut || 0, p_actif: d.actif !== false
+          p_taux_defaut: d.tauxDefaut || 0, p_liste_id: d.listeId || null, p_actif: d.actif !== false
         });
         if(error) throw error;
         resolve({success: true, id: id});
@@ -1142,16 +1155,16 @@ function callAPI(action, params) {
       else if (action === 'getListesAdmin') {
         const {data, error} = await supabase.rpc('get_listes_admin', auth());
         if(error) throw error;
-        resolve((data||[]).map(l => ({ id: l.id, chantierId: l.chantier_id, chantierNom: l.chantier_nom, libelle: l.libelle, cp: l.cp })));
+        resolve((data||[]).map(l => ({ id: l.id, tous: l.tous_chantiers, chantierIds: l.chantier_ids || [], chantierNoms: l.chantier_noms || [], libelle: l.libelle, cp: l.cp })));
       }
       else if (action === 'saveListe') {
         const d = params.liste;
         if(d.id) {
-          const {error} = await supabase.rpc('update_liste_admin', {...auth(), p_id: d.id, p_chantier_id: d.chantierId || null, p_libelle: d.libelle, p_cp: d.cp || ''});
+          const {error} = await supabase.rpc('update_liste_admin', {...auth(), p_id: d.id, p_tous_chantiers: !!d.tous, p_chantier_ids: d.chantierIds || [], p_libelle: d.libelle, p_cp: d.cp || ''});
           if(error) throw error;
           resolve({success: true, id: d.id});
         } else {
-          const {data: id, error} = await supabase.rpc('add_liste_admin', {...auth(), p_chantier_id: d.chantierId || null, p_libelle: d.libelle, p_cp: d.cp || ''});
+          const {data: id, error} = await supabase.rpc('add_liste_admin', {...auth(), p_tous_chantiers: !!d.tous, p_chantier_ids: d.chantierIds || [], p_libelle: d.libelle, p_cp: d.cp || ''});
           if(error) throw error;
           resolve({success: true, id: id});
         }
@@ -1204,6 +1217,7 @@ async function exportExcel(){
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.chantiers || []), 'Chantiers');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.listes || []), 'Listes');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.liste_chantiers || []), 'ListesChantiers');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.saisies || []), 'Saisies');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.versements || []), 'Versements');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.app_users || []), 'Utilisateurs');
@@ -1236,6 +1250,7 @@ function _doImportExcel(file){
         user_chantiers: wb.Sheets['UtilisateursChantiers'] ? XLSX.utils.sheet_to_json(wb.Sheets['UtilisateursChantiers']) : [],
         chantiers:      wb.Sheets['Chantiers']  ? XLSX.utils.sheet_to_json(wb.Sheets['Chantiers'])  : [],
         listes:         wb.Sheets['Listes']     ? XLSX.utils.sheet_to_json(wb.Sheets['Listes'])     : [],
+        liste_chantiers: wb.Sheets['ListesChantiers'] ? XLSX.utils.sheet_to_json(wb.Sheets['ListesChantiers']) : [],
         saisies:        wb.Sheets['Saisies']    ? XLSX.utils.sheet_to_json(wb.Sheets['Saisies'])    : [],
         versements:     wb.Sheets['Versements'] ? XLSX.utils.sheet_to_json(wb.Sheets['Versements']) : []
       };
@@ -1378,6 +1393,10 @@ function renderHistory(){
 
   var h='';
   items.forEach(function(s, i){
+    var who = nomTP(s);
+    var whoHtml = who ? '<div class="rwho">'+escH(who)+'</div>' : '';
+    var vl = (s.charges>0) ? versLine(s.refVers, s.charges) : '';
+    if(vl) whoHtml += '<div class="rvers">Versé : '+escH(vl)+'</div>';
     var obsHtml = s.obs ? '<div class="robs">'+escH(s.obs)+'</div>' : '';
     var rCls = 'g';
     if(s.produits>0 && s.reglement>0) rCls='p';
@@ -1421,6 +1440,7 @@ function renderHistory(){
         '<span class="lib">'+escH(s.libelle||'—')+vBadge+rglBadge+'</span>'+
         '<span class="dcol">'+fW(s.date)+'<br>'+fD(s.date)+'</span>'+
       '</div>'+
+      whoHtml+
       obsHtml+
       '<div class="r2">'+
         '<span class="c">'+(s.charges?fN(s.charges):'·')+'</span>'+
@@ -1468,9 +1488,9 @@ function renderVersements(){
     var detHtml='';
     if(v.details && v.details.length>0){
       v.details.forEach(function(d){
-        var sub = d.tranche ? '(tranche: '+fN(d.tranche)+')' : 'Charge totale: '+fN(d.charge);
-        detHtml+='<div class="vd-item"><div><div class="vd-lib">'+escH(d.libelle)+'</div><div class="vd-sub">'+sub+'</div></div>'+
-          '<span class="vd-amt">'+(d.tranche?fN(d.tranche):fN(d.charge))+'</span></div>';
+        var sub = 'Charge : '+fN(d.charge);
+        detHtml+='<div class="vd-item"><div><div class="vd-lib">'+escH(d.libelle)+'</div>'+vcWho(d)+'<div class="vd-sub">'+sub+'</div></div>'+
+          '<span class="vd-amt">Versé : '+(d.tranche?fN(d.tranche):fN(d.charge))+'</span></div>';
       });
     } else {
       detHtml='<div class="vd-empty">Aucune charge associée</div>';
@@ -1487,7 +1507,7 @@ function renderVersements(){
         '<span class="vsolde '+soldeCls+'">'+soldeLabel+'</span>'+
       '</div>'+
       (v.obs?'<div class="vcard-obs">'+escH(v.obs)+'</div>':'')+
-      '<div class="vcard-detail" id="vd'+i+'">'+
+      '<div class="vcard-detail on" id="vd'+i+'">'+
         '<div class="vcard-detail-inner">'+
           '<div class="vd-hd">Charges réglées avec ce versement</div>'+
           detHtml+
@@ -1608,6 +1628,16 @@ function openVersementForm(){
   $('sh-v').classList.add('on');
 }
 
+function vcWho(c){
+  var src = c;
+  if((c.tiersId==null && c.personnelId==null) || c.obs==null){
+    src = (S.saisies||[]).find(function(x){ return String(x.rowNum)===String(c.rowNum); }) || c;
+  }
+  var who = nomTP(src), obs = c.obs || src.obs;
+  return (who ? '<div class="vc-who">'+escH(who)+'</div>' : '') +
+         (obs ? '<div class="vc-obs">'+escH(obs)+'</div>' : '');
+}
+
 function renderVCharges(){
   var cont=$('v-charges-list');
   if(!S.chargesPourVers || S.chargesPourVers.length===0){
@@ -1621,12 +1651,15 @@ function renderVCharges(){
     var alreadyVersee = !!(c.refVers);
     var itemCls = 'vc-item' + (alreadyVersee?' vc-already-versee':'');
     var subLabel = c.reglement>0 ? 'Déjà payé: '+fN(c.reglement)+' | Reste: '+fN(resteAPayer) : fD(c.date);
+    var vLine = versLine(c.refVers, c.charges);
+    if(vLine) subLabel += '<br>Versé : '+escH(vLine);
 
     h+='<div class="'+itemCls+'">'+
       '<input type="checkbox" id="vc'+i+'" data-idx="'+i+'" data-charge="'+c.charges+'" data-reste="'+resteAPayer+'"'+
         ' onchange="onVCCheck(this)">'+
       '<div class="vc-label">'+
         '<div class="vc-lib">'+escH(c.libelle||'—')+'</div>'+
+        vcWho(c)+
         '<div class="vc-sub">'+subLabel+'</div>'+
       '</div>'+
       '<div class="vc-right">'+
@@ -1790,6 +1823,7 @@ function renderEditVCharges(){
         ' onchange="onEditVCCheck(this)">'+
       '<div class="vc-label">'+
         '<div class="vc-lib">'+escH(c.libelle||'—')+'</div>'+
+        vcWho(c)+
         '<div class="vc-sub">'+subLabel+'</div>'+
       '</div>'+
       '<div class="vc-right">'+
@@ -1858,6 +1892,25 @@ function deleteFromEditVers() {
 /* ═══════════════════════════════════════
    LIBELLÉS
 ═══════════════════════════════════════ */
+/* Versements couvrant une charge : "V001 : 500 · V002 : 1 200" (sans tranche = charge entière) */
+function versLine(refVers, charge){
+  if(!refVers) return '';
+  return String(refVers).split(',').map(function(r){
+    var p = r.trim().split(':'); if(!p[0]) return '';
+    var m = p[1] ? Number(p[1]) : charge;
+    return p[0] + ' : ' + fN(m||0);
+  }).filter(Boolean).join(' · ');
+}
+
+function nomTP(s){
+  function nomDe(list, id){
+    if(!id) return '';
+    var f = (Array.isArray(list)?list:[]).find(function(t){ return String(t.id)===String(id); });
+    return f ? f.nom : '';
+  }
+  return nomDe(S.tiersList, s.tiersId) || nomDe(S.personnelList, s.personnelId);
+}
+
 function renderLibelles(){
   var sel=$('fl');
   sel.innerHTML='<option value="">Choisir…</option>';
@@ -1886,7 +1939,7 @@ function loadData(id){
   callAPI('getLibellesForChantier',{chantier:id, mode:''})
     .then(function(d){ S.libelles=d||[]; renderLibelles(); ck(); })
     .catch(function(){ ck(); });
-  loadTP();
+  loadTP().then(function(){ renderHistory(); });
 }
 
 /* Tiers / Personnel : callAPI ne rejette jamais (il renvoie {error}), on vérifie donc le résultat.
@@ -1964,8 +2017,8 @@ function setupFormForMode(m){
   $('lbl-rgl').textContent  = isC?'Règlement direct (montant payé)':'Règlement';
   // Montant : toujours visible
   $('fg-rgl').style.display = isC ? 'block' : 'none';
-  // Tiers / Employé : uniquement en mode Charge
-  $('fg-tp').style.display = isC ? 'grid' : 'none';
+  // Tiers / Employé : en mode Charge et Règlement direct (optionnels)
+  $('fg-tp').style.display = (isC||isR) ? 'grid' : 'none';
   if(!isC) $('fg-quantite').style.display = 'none';
 }
 
@@ -1975,12 +2028,21 @@ function setupFormForMode(m){
    autre libellé → liste tiers (actifs) seulement. En modification, l'élément déjà lié reste listé. */
 var LIB_PERSONNEL = 'personnel';
 function normLib(l){ return String(l||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
-function fillTPActive(selId, list, currentId, enabled){
+function storeLibIds(rows){
+  S.libIds = {};
+  (rows||[]).forEach(function(l){
+    if(l.liste_id == null) return;
+    var k = normLib(l.libelle);
+    (S.libIds[k] = S.libIds[k] || []).push(String(l.liste_id));
+  });
+}
+function fillTPActive(selId, list, currentId, enabled, ids){
   var sel=$(selId), h='<option value="">Aucun</option>';
   if(enabled){
     (Array.isArray(list)?list:[]).forEach(function(x){
       var cur = currentId && String(x.id)===String(currentId);
       if(x.actif===false && !cur) return;
+      if(!cur && ids && ids.length && x.listeId!=null && ids.indexOf(String(x.listeId))<0) return;
       h += '<option value="'+x.id+'"'+(cur?' selected':'')+'>'+escH(x.nom)+(x.actif===false?' (inactif)':'')+'</option>';
     });
   }
@@ -1990,8 +2052,9 @@ function updateTPForLibelle(curT, curP){
   var lib=$('fl').value, isPers=normLib(lib)===LIB_PERSONNEL;
   if(curT===undefined) curT=$('ftiers').value;
   if(curP===undefined) curP=$('fpersonnel').value;
-  fillTPActive('ftiers', S.tiersList, curT, !!lib && !isPers);
-  fillTPActive('fpersonnel', S.personnelList, curP, !!lib && isPers);
+  var ids = (S.libIds||{})[normLib(lib)] || [];
+  fillTPActive('ftiers', S.tiersList, curT, !!lib && !isPers, ids);
+  fillTPActive('fpersonnel', S.personnelList, curP, !!lib && isPers, ids);
   if(!$('fpersonnel').value) $('fg-quantite').style.display='none';
 }
 function onLibelleChange(){
@@ -2014,7 +2077,7 @@ function onTiersChange(){
 function onPersonnelChange(){
   var pid = $('fpersonnel').value;
   if(pid) $('ftiers').value = '';
-  if(!pid){ $('fg-quantite').style.display='none'; return; }
+  if(!pid || S.mode!=='C'){ $('fg-quantite').style.display='none'; return; }
   var p = (S.personnelList||[]).find(function(x){ return String(x.id)===String(pid); });
   if(!p) return;
   if(p.modePaie==='unite'){
@@ -2072,7 +2135,7 @@ function editRow(rowNum){
   $('sh-title').textContent='Modifier '+(eMode==='C'?'Charge':(eMode==='P'?'Produit':'Règlement'));
   $('fd').value=s.date||'';
   $('fl').value=s.libelle||'';
-  if(eMode==='C') applyEditTP(s);
+  if(eMode==='C'||eMode==='R') applyEditTP(s);
   $('fm').value=eMode==='C'?(s.charges||''):(eMode==='P'?(s.produits||''):(s.reglement||''));
   $('frgl').value=eMode==='C'?(s.reglement||''):'';
   $('fo').value=s.obs||'';
@@ -2125,8 +2188,8 @@ function submitForm(e){
     produits: S.mode==='P' ? montant : 0,
     reglement:(S.mode==='C') ? (parseFloat($('frgl').value)||0) : (S.mode==='R' ? montant : 0),
     obs:      $('fo').value,
-    tiersId:     S.mode==='C' ? ($('ftiers').value || null) : null,
-    personnelId: S.mode==='C' ? ($('fpersonnel').value || null) : null,
+    tiersId:     (S.mode==='C'||S.mode==='R') ? ($('ftiers').value || null) : null,
+    personnelId: (S.mode==='C'||S.mode==='R') ? ($('fpersonnel').value || null) : null,
     quantite:    S.mode==='C' ? (parseFloat($('fquantite').value) || null) : null
   };
 
@@ -2385,6 +2448,7 @@ function handleStartupData(res, pin) {
   
   $('ld').classList.add('h');
   $('app').classList.add('on');
+  loadTP().then(function(){ renderHistory(); });
 }
 
 /* ═══════════════════════════════════════
@@ -2506,15 +2570,18 @@ function openListesPanel(){
 
 function renderListesList(){
   var h = '';
-  (S.listesList||[]).forEach(function(l){
-    var portee = l.chantierId ? escH(l.chantierNom || ('#'+l.chantierId)) : 'Tous les chantiers';
+  var act = String(S.active);
+  (S.listesList||[]).filter(function(l){
+    return l.tous || (l.chantierIds||[]).map(String).indexOf(act) > -1;
+  }).forEach(function(l){
+    var portee = l.tous ? 'Tous les chantiers' : escH((l.chantierNoms||[]).join(', ') || '—');
     var type = l.cp === 'P' ? 'Produit' : 'Charge';
     h += '<div class="row" style="cursor:pointer" onclick="openListeForm('+l.id+')">'+
       '<div class="r1"><span class="lib">'+escH(l.libelle)+'</span></div>'+
       '<div class="robs">'+portee+' — '+type+'</div>'+
     '</div>';
   });
-  if(!h) h = '<div class="vc-empty">Aucun libellé</div>';
+  if(!h) h = '<div class="vc-empty">Aucun libellé pour ce chantier</div>';
   $('listes-list').innerHTML = h;
 }
 
@@ -2526,26 +2593,34 @@ function openListeForm(listeId){
   $('lf-libelle').value = l ? l.libelle : '';
   $('lf-cp').value = l ? (l.cp === 'P' ? 'P' : 'C') : 'C';
 
-  var h = '<option value="">Tous les chantiers</option>';
+  var ids = ((l && l.chantierIds) || []).map(String), tous = l ? !!l.tous : true;
+  var st = 'display:flex;align-items:center;gap:8px;padding:6px 0;text-transform:none;letter-spacing:0;font-size:14px;color:var(--txt);cursor:pointer';
+  var h = '<label style="'+st+'"><input type="checkbox" id="lf-tous"'+(tous?' checked':'')+' onchange="lfToggleTous()"> <b>Tous les chantiers</b></label>';
   (S.chantiers||[]).forEach(function(c){
-    var sel = (l && String(l.chantierId) === String(c.id)) ? 'selected' : '';
-    h += '<option value="'+c.id+'" '+sel+'>'+escH(c.nom)+'</option>';
+    h += '<label style="'+st+'"><input type="checkbox" class="lf-c" value="'+c.id+'"'+(ids.indexOf(String(c.id))>-1?' checked':'')+(tous?' disabled':'')+'> '+escH(c.nom)+'</label>';
   });
-  $('lf-chantier').innerHTML = h;
+  $('lf-chantiers').innerHTML = h;
 
   $('btn-lf-del').style.display = l ? '' : 'none';
   $('ov').classList.add('on');
   $('sh-liste-form').classList.add('on');
 }
 
+function lfToggleTous(){
+  var t = $('lf-tous').checked;
+  [].forEach.call(document.querySelectorAll('.lf-c'), function(x){ x.disabled = t; if(t) x.checked = false; });
+}
+
 function saveListe(){
   var libelle = $('lf-libelle').value.trim();
   if(!libelle){ toast('Saisissez un libellé','er'); return; }
-  var chantierId = $('lf-chantier').value ? parseInt($('lf-chantier').value,10) : null;
+  var tous = $('lf-tous').checked;
+  var chantierIds = [].slice.call(document.querySelectorAll('.lf-c:checked')).map(function(x){ return parseInt(x.value,10); });
+  if(!tous && !chantierIds.length){ toast('Choisissez au moins un chantier','er'); return; }
   var cp = $('lf-cp').value;
 
   var btn = $('btn-lf'); btn.classList.add('ld'); btn.disabled = true;
-  callAPI('saveListe', { liste: { id: S.editListeId, libelle: libelle, chantierId: chantierId, cp: cp } })
+  callAPI('saveListe', { liste: { id: S.editListeId, libelle: libelle, tous: tous, chantierIds: chantierIds, cp: cp } })
     .then(function(r){
       btn.classList.remove('ld'); btn.disabled = false;
       if(r.error){ toast('Erreur: '+r.error,'er'); return; }
@@ -2645,6 +2720,19 @@ function openTiersPanel(){
     .catch(function(e){ toast('Erreur: '+e.message,'er'); });
 }
 
+function fillListeSelect(selId, currentId){
+  var sel = $(selId);
+  function fill(list){
+    var h = '<option value="">Aucun</option>';
+    (list||[]).forEach(function(l){
+      h += '<option value="'+l.id+'"'+(currentId && String(l.id)===String(currentId)?' selected':'')+'>'+escH(l.libelle)+'</option>';
+    });
+    sel.innerHTML = h;
+  }
+  if(S.listesList && S.listesList.length){ fill(S.listesList); return; }
+  callAPI('getListesAdmin', {}).then(function(r){ S.listesList = r||[]; fill(S.listesList); });
+}
+
 function renderTiersList(){
   var h = '';
   (S.tiersList||[]).forEach(function(t){
@@ -2666,6 +2754,7 @@ function openTiersForm(tiersId){
   $('tf-nom').value = t ? t.nom : '';
   $('tf-type').value = t ? (t.type||'') : '';
   $('tf-actif').checked = t ? (t.actif!==false) : true;
+  fillListeSelect('tf-liste', t ? t.listeId : null);
   $('btn-tf-del').style.display = t ? '' : 'none';
   $('ov').classList.add('on');
   $('sh-tiers-form').classList.add('on');
@@ -2675,7 +2764,7 @@ function saveTiers(){
   var nom = $('tf-nom').value.trim();
   if(!nom){ toast('Saisissez un nom','er'); return; }
   var btn = $('btn-tf'); btn.classList.add('ld'); btn.disabled = true;
-  callAPI('saveTiers', { tiers: { id: S.editTiersId, nom: nom, type: $('tf-type').value, actif: $('tf-actif').checked } })
+  callAPI('saveTiers', { tiers: { id: S.editTiersId, nom: nom, type: $('tf-type').value, listeId: $('tf-liste').value ? parseInt($('tf-liste').value,10) : null, actif: $('tf-actif').checked } })
     .then(function(r){
       btn.classList.remove('ld'); btn.disabled = false;
       if(r && r.error){ toast('Erreur: '+r.error,'er'); return; }
@@ -2729,6 +2818,7 @@ function openPersonnelForm(personnelId){
   $('pf-mode').value = p ? (p.modePaie||'journalier') : 'journalier';
   $('pf-taux').value = p ? (p.tauxDefaut||'') : '';
   $('pf-actif').checked = p ? (p.actif!==false) : true;
+  fillListeSelect('pf-liste', p ? p.listeId : null);
   $('btn-pf-del').style.display = p ? '' : 'none';
   $('ov').classList.add('on');
   $('sh-personnel-form').classList.add('on');
@@ -2739,7 +2829,7 @@ function savePersonnel(){
   if(!nom){ toast('Saisissez un nom','er'); return; }
   var btn = $('btn-pf'); btn.classList.add('ld'); btn.disabled = true;
   callAPI('savePersonnel', { personnel: {
-    id: S.editPersonnelId, nom: nom, modePaie: $('pf-mode').value,
+    id: S.editPersonnelId, nom: nom, modePaie: $('pf-mode').value, listeId: $('pf-liste').value ? parseInt($('pf-liste').value,10) : null,
     tauxDefaut: parseFloat($('pf-taux').value)||0, actif: $('pf-actif').checked
   }})
     .then(function(r){
@@ -2770,10 +2860,10 @@ function openComptesPanel(){
   $('ov').classList.add('on');
   $('sh-comptes').classList.add('on');
   callAPI('getSoldesTiers', {chantier: S.active})
-    .then(function(r){ S.comptesTiers = (r||[]).filter(function(x){ return x.totalCharges>0; }); renderComptes('comptes-tiers-list', S.comptesTiers); })
+    .then(function(r){ if(r && r.error){ showError(r.error, 'Comptes — getSoldesTiers (get_soldes_tiers)', 'Vérifiez la fonction SQL get_soldes_tiers dans Supabase.'); return; } S.comptesTiers = (r||[]).filter(function(x){ return x.totalCharges>0; }); renderComptes('comptes-tiers-list', S.comptesTiers); })
     .catch(function(e){ toast('Erreur: '+e.message,'er'); });
   callAPI('getSoldesPersonnel', {chantier: S.active})
-    .then(function(r){ S.comptesPersonnel = (r||[]).filter(function(x){ return x.totalCharges>0; }); renderComptes('comptes-personnel-list', S.comptesPersonnel); })
+    .then(function(r){ if(r && r.error){ showError(r.error, 'Comptes — getSoldesPersonnel (get_soldes_personnel)', 'Vérifiez la fonction SQL get_soldes_personnel dans Supabase.'); return; } S.comptesPersonnel = (r||[]).filter(function(x){ return x.totalCharges>0; }); renderComptes('comptes-personnel-list', S.comptesPersonnel); })
     .catch(function(e){ toast('Erreur: '+e.message,'er'); });
 }
 
@@ -2812,10 +2902,32 @@ function openEtatChargesPanel(){
   $('ov').classList.add('on');
   $('sh-etat-charges').classList.add('on');
 
-  loadTP().then(function(){
-    fillTPSelect('ec-tiers', S.tiersList, ''); $('ec-tiers').options[0].text = 'Tous';
-    fillTPSelect('ec-personnel', S.personnelList, ''); $('ec-personnel').options[0].text = 'Tous';
+  var chantier = S.active;
+  Promise.all([loadTP(), callAPI('getLibellesForChantier',{chantier:chantier, mode:'C'})]).then(function(r){
+    if(chantier !== S.active) return;
+    var libs2 = {};
+    Object.keys(libs).forEach(function(k){ libs2[k]=1; });
+    (Array.isArray(r[1]) ? r[1] : []).forEach(function(l){ if(l) libs2[l]=1; });
+    var hl2 = '<option value="">Tous</option>';
+    Object.keys(libs2).sort(function(a,b){ return a.localeCompare(b,'fr'); }).forEach(function(l){
+      hl2 += '<option value="'+escH(l)+'">'+escH(l)+'</option>';
+    });
+    $('ec-libelle').innerHTML = hl2;
+    var ids = [];
+    Object.keys(S.libIds||{}).forEach(function(k){ ids = ids.concat(S.libIds[k]); });
+    fillTPSelect('ec-tiers', tpDuChantier(S.tiersList, 'tiersId', ids), ''); $('ec-tiers').options[0].text = 'Tous';
+    fillTPSelect('ec-personnel', tpDuChantier(S.personnelList, 'personnelId', ids), ''); $('ec-personnel').options[0].text = 'Tous';
     applyEtatCharges();
+  });
+}
+
+/* Tiers / personnel concernés par le chantier actif : déjà utilisés dans ses saisies,
+   ou rattachés à une liste visible sur ce chantier (ou pas encore rattachés à une liste). */
+function tpDuChantier(list, key, ids){
+  var used = {};
+  (S.saisies||[]).forEach(function(x){ if(x[key]) used[String(x[key])] = 1; });
+  return (Array.isArray(list)?list:[]).filter(function(t){
+    return used[String(t.id)] || t.listeId == null || ids.indexOf(String(t.listeId)) > -1;
   });
 }
 
